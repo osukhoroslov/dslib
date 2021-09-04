@@ -1,0 +1,15 @@
+[package]
+name = "dslib"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+decorum = "0.3.1"
+rand = "0.8.4"
+rand_pcg = "0.3.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dependencies.pyo3]
+version = "0.14.1"
+features = ["auto-initialize"]
