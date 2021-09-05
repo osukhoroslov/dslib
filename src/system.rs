@@ -125,6 +125,10 @@ impl<M: Debug + Clone + 'static> System<M> {
         self.net.borrow_mut().connect_node(node_id);
     }
 
+    pub fn reset_network(&mut self) {
+        self.net.borrow_mut().reset_network();
+    }
+
     pub fn send(&mut self, msg: M, src: &str, dest: &str) {
         let event = SysEvent::MessageSend { 
             msg, 

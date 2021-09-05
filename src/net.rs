@@ -100,6 +100,12 @@ impl Network {
             }
         }
     }
+
+    pub fn reset_network(&mut self) {
+        self.disabled_links.clear();
+        self.drop_incoming.clear();
+        self.drop_outgoing.clear();
+    }
 }
 
 impl<M: Debug + Clone> Actor<SysEvent<M>> for Network {
@@ -126,7 +132,8 @@ impl<M: Debug + Clone> Actor<SysEvent<M>> for Network {
                             }
                         }
                     } else {
-                        println!("!!! Dropped message {:?}", msg);
+                        println!("{:>9} {:>10} -x- {:<10} {:?} <-- message dropped",
+                                 "!!!", src.to(), dest.to(), msg);
                     }
                 } else {
                     println!("!!! Discarded message from crashed node {:?}", msg);
