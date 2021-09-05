@@ -43,6 +43,9 @@ impl<T> TestSuite<T> {
                 println!("- {}", test);
             }
             println!("");
+            std::process::exit(1);
+        } else {
+            std::process::exit(0);
         }
     }
 }
