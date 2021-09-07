@@ -37,15 +37,23 @@ class Context(object):
         self._canceled_timers: List[str] = list()
 
     def send(self, msg: Message, to: str):
+        if not isinstance(to, str):
+            raise TypeError('to argument has to be string, not {}'.format(type(to)))
         self._sent_messages.append((msg.type, json.dumps(msg._data), to))
 
     def send_local(self, msg: Message):
         self._sent_local_messages.append((msg.type, json.dumps(msg._data)))
 
     def set_timer(self, timer_id: str, delay: float):
+        if not isinstance(timer_id, str):
+            raise TypeError('timer_id argument has to be str, not {}'.format(type(timer_id)))
+        if not isinstance(delay, (int, float)):
+            raise TypeError('delay argument has to be int or float, not {}'.format(type(delay)))
         self._set_timers.append((timer_id, delay))
     
     def cancel_timer(self, timer_id: str):
+        if not isinstance(timer_id, str):
+            raise TypeError('timer_id argument has to be str, not {}'.format(type(timer_id)))
         self._canceled_timers.append(timer_id)
 
     def time(self) -> float:
