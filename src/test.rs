@@ -16,7 +16,7 @@ impl<T> TestSuite<T> {
     }
 
     pub fn add(&mut self, name: &str, f: fn(&T) -> TestResult, config: T) {
-        self.tests.push(Test {name: name.to_string(), func: f, config: config});
+        self.tests.push(Test {name: name.to_string(), func: f, config});
     }
 
     pub fn run(&mut self) {
@@ -42,7 +42,7 @@ impl<T> TestSuite<T> {
             for test in failed_tests {
                 println!("- {}", test);
             }
-            println!("");
+            println!();
             std::process::exit(1);
         } else {
             std::process::exit(0);

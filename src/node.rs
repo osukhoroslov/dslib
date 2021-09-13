@@ -61,9 +61,8 @@ impl<'a, 'b, 'c, M: Debug + Clone> Context<'a, 'b, 'c, M> {
     }
 
     pub fn cancel_timer(&mut self, name: &str) {
-        match self.timers.remove(&(self.ctx.id.clone(), name.to_string())) {
-            Some(event_id) => self.ctx.cancel_event(event_id),
-            _ => ()
+        if let Some(event_id) = self.timers.remove(&(self.ctx.id.clone(), name.to_string())) {
+            self.ctx.cancel_event(event_id);
         }
     }
 
@@ -72,25 +71,25 @@ impl<'a, 'b, 'c, M: Debug + Clone> Context<'a, 'b, 'c, M> {
     }
 }
 
-enum NodeSatus {
-    HEALTHY,
-    CRASHED,
+enum NodeStatus {
+    Healthy,
+    Crashed,
 }
 
 pub struct NodeActor<M> {
     node: Rc<RefCell<dyn Node<M>>>,
     timers: HashMap<(ActorId, String), u64>,
     local_messages: Vec<M>,
-    status: NodeSatus,
+    status: NodeStatus,
 }
 
 impl<M> NodeActor<M> {
     pub fn new(node: Rc<RefCell<dyn Node<M>>>) -> Self {
-        Self { 
+        Self {
             node,
             timers: HashMap::new(),
             local_messages: Vec::new(),
-            status: NodeSatus::HEALTHY,
+            status: NodeStatus::Healthy,
         }
     }
 
@@ -99,22 +98,18 @@ impl<M> NodeActor<M> {
     }
 
     pub fn read_local_messages(&mut self) -> Vec<M> {
-        let mut messages = Vec::new();
-        for msg in self.local_messages.drain(..) {
-            messages.push(msg);
-        }
-        messages
+        self.local_messages.drain(..).collect()
     }
 
     pub fn crash(&mut self) {
-        self.status = NodeSatus::CRASHED;
+        self.status = NodeStatus::Crashed;
     }
 }
 
 impl<M: Debug + Clone> Actor<SysEvent<M>> for NodeActor<M> {
     fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>) {
         match self.status {
-            NodeSatus::HEALTHY => {
+            NodeStatus::Healthy => {
                 match event {
                     SysEvent::MessageReceive { msg, src, dest } => {
                         println!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
@@ -133,13 +128,13 @@ impl<M: Debug + Clone> Actor<SysEvent<M>> for NodeActor<M> {
                         self.node.borrow_mut().on_timer(name, &mut node_ctx);
                     }
                     _ => ()
-                }        
+                }
             }
-            NodeSatus::CRASHED => ()
+            NodeStatus::Crashed => ()
         }
     }
 
     fn is_active(&self) -> bool {
-        matches!(self.status, NodeSatus::HEALTHY)
+        matches!(self.status, NodeStatus::Healthy)
     }
 }

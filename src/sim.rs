@@ -89,7 +89,7 @@ impl<'a, E: Debug> ActorContext<'a, E> {
     }
 
     pub fn emit(&mut self, event: E, dest: ActorId, delay: f64) -> u64 {
-        let entry = CtxEvent{ event, dest: dest, delay };
+        let entry = CtxEvent{ event, dest, delay };
         self.events.push(entry);
         self.next_event_id += 1;
         self.next_event_id - 1
@@ -145,7 +145,7 @@ impl<E: Debug> Simulation<E> {
         let id = entry.id;
         self.events.push(entry);
         self.event_count += 1;
-        return id;
+        id
     }
 
     pub fn cancel_event(&mut self, event_id: u64) {
@@ -157,7 +157,7 @@ impl<E: Debug> Simulation<E> {
             if !self.canceled_events.remove(&e.id) {
                 // println!("{} {}->{} {:?}", e.time, e.src, e.dest, e.event);
                 self.clock = e.time;
-                let actor = self.actors.get(&e.dest.clone());
+                let actor = self.actors.get(&e.dest);
                 let mut ctx = ActorContext{
                     id: e.dest.clone(), 
                     time: self.clock.into_inner(), 
@@ -204,10 +204,6 @@ impl<E: Debug> Simulation<E> {
     }
 
     pub fn read_undelivered_events(&mut self) -> Vec<EventEntry<E>> {
-        let mut events = Vec::new();
-        for e in self.undelivered_events.drain(..) {
-            events.push(e);
-        }
-        events
+        self.undelivered_events.drain(..).collect()
     }
 }
