@@ -117,9 +117,10 @@ impl Node<JsonMessage> for PyNode {
         Python::with_gil(|py| {
             let py_msg = self.msg_class.call_method1(py, "from_json", (msg.tip, msg.data)).unwrap();
             let py_ctx = self.ctx_class.call1(py, (ctx.time(),)).unwrap();
-            self.node.call_method1(py, "on_message", (py_msg, from, &py_ctx)).map_err(|e|  {
-                eprintln!("\n!!! Error when calling Python code:\n"); e.print(py); eprintln!(""); e
-            }).unwrap();
+            self.node
+                .call_method1(py, "on_message", (py_msg, from, &py_ctx))
+                .map_err(|e| log_python_error(e, py))
+                .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
     }
@@ -128,9 +129,10 @@ impl Node<JsonMessage> for PyNode {
         Python::with_gil(|py| {
             let py_msg = self.msg_class.call_method1(py, "from_json", (msg.tip, msg.data)).unwrap();
             let py_ctx = self.ctx_class.call1(py, (ctx.time(),)).unwrap();
-            self.node.call_method1(py, "on_local_message", (py_msg, &py_ctx)).map_err(|e|  {
-                eprintln!("\n!!! Error when calling Python code:\n"); e.print(py); eprintln!(""); e
-            }).unwrap();
+            self.node
+                .call_method1(py, "on_local_message", (py_msg, &py_ctx))
+                .map_err(|e| log_python_error(e, py))
+                .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
     }    
@@ -138,10 +140,18 @@ impl Node<JsonMessage> for PyNode {
     fn on_timer(&mut self, timer: String, ctx: &mut Context<JsonMessage>) {
         Python::with_gil(|py| {
             let py_ctx = self.ctx_class.call1(py, (ctx.time(),)).unwrap();
-            self.node.call_method1(py, "on_timer", (timer, &py_ctx)).map_err(|e|  {
-                eprintln!("\n!!! Error when calling Python code:\n"); e.print(py); eprintln!(""); e
-            }).unwrap();
+            self.node
+                .call_method1(py, "on_timer", (timer, &py_ctx))
+                .map_err(|e| log_python_error(e, py))
+                .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
     }
+}
+
+fn log_python_error(e: PyErr, py: Python) -> PyErr {
+    eprintln!("\n!!! Error when calling Python code:\n");
+    e.print(py);
+    eprintln!();
+    e
 }
