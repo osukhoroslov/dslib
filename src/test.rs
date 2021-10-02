@@ -31,7 +31,7 @@ impl<T> TestSuite<T> {
                 }
                 Err(e) => {
                     println!("\nFAILED: {}\n", e);
-                    failed_tests.push(&test.name);
+                    failed_tests.push((&test.name, e));
                 }
             }
         }
@@ -39,8 +39,8 @@ impl<T> TestSuite<T> {
         println!("\nPassed {} from {} tests\n", passed_count, self.tests.len());
         if !failed_tests.is_empty() {
             println!("Failed tests:");
-            for test in failed_tests {
-                println!("- {}", test);
+            for (test, e) in failed_tests {
+                println!("- {}: {}", test, e);
             }
             println!();
             std::process::exit(1);
