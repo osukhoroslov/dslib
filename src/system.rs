@@ -74,11 +74,15 @@ impl<M: Debug + Clone + 'static> System<M> {
     }
 
     pub fn crash_node(&mut self, node_id: &str) {
-        println!("{:09.3} [{}] crashed!", self.sim.time(), node_id);
+        println!("{:>9.3} {:>10} CRASHED!", self.sim.time(), node_id);
         self.crashed_nodes.insert(node_id.to_string());
         let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
         node.crash();
         self.net.borrow_mut().node_crashed(node_id);
+    }
+
+    pub fn node_is_crashed(&self, node_id: &str) -> bool {
+        self.crashed_nodes.contains(node_id)
     }
 
     pub fn node_count(&self) -> u32 {
@@ -129,6 +133,10 @@ impl<M: Debug + Clone + 'static> System<M> {
         self.net.borrow_mut().reset_network();
     }
 
+    pub fn get_network_message_count(&self) -> u64 {
+        self.net.borrow().get_message_count()
+    }
+
     pub fn send(&mut self, msg: M, src: &str, dest: &str) {
         let event = SysEvent::MessageSend { 
             msg, 
@@ -157,20 +165,9 @@ impl<M: Debug + Clone + 'static> System<M> {
         self.sim.step_until_no_events()
     }
 
-    pub fn step_until_local_message(&mut self, node_id: &str) -> Vec<M> {
-        while self.count_local_messages(node_id) == 0 && self.step() {
-        }
-        self.read_local_messages(node_id)
-    }
-
-    pub fn count_local_messages(&self, node_id: &str) -> usize {
+    pub fn get_local_events(&self, node_id: &str) -> Vec<LocalEvent<M>> {
         let node = self.nodes.get(node_id).unwrap().borrow();
-        node.count_local_messages()
-    }
-
-    pub fn read_local_messages(&mut self, node_id: &str) -> Vec<M> {
-        let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
-        node.read_local_messages()
+        node.get_local_events()
     }
 
     pub fn count_undelivered_events(&mut self) -> usize {

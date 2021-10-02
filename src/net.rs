@@ -15,6 +15,7 @@ pub struct Network {
     drop_incoming: HashSet<String>,
     drop_outgoing: HashSet<String>,
     disabled_links: HashSet<(String, String)>,
+    message_count: u64,
 }
 
 impl Network {
@@ -29,6 +30,7 @@ impl Network {
             drop_incoming: HashSet::new(),
             drop_outgoing: HashSet::new(),
             disabled_links: HashSet::new(),
+            message_count: 0,
         }
     }
 
@@ -106,6 +108,10 @@ impl Network {
         self.drop_incoming.clear();
         self.drop_outgoing.clear();
     }
+
+    pub fn get_message_count(&self) -> u64 {
+        self.message_count
+    }
 }
 
 impl<M: Debug + Clone> Actor<SysEvent<M>> for Network {
@@ -132,12 +138,13 @@ impl<M: Debug + Clone> Actor<SysEvent<M>> for Network {
                             }
                         }
                     } else {
-                        println!("{:>9} {:>10} -x- {:<10} {:?} <-- message dropped",
+                        println!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
                                  "!!!", src.to(), dest.to(), msg);
                     }
                 } else {
                     println!("!!! Discarded message from crashed node {:?}", msg);
                 }
+                self.message_count += 1;
             }
             _ => (),
         }
