@@ -178,7 +178,7 @@ impl<E: Debug> Simulation<E> {
                                 self.cancel_event(event_id);
                             };
                         } else {
-                            println!("Discarded event for inactive actor {}", e.dest);
+                            //println!("Discarded event for inactive actor {}", e.dest);
                         }
                     }
                     _ => {
