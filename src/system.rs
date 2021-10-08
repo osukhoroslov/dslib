@@ -11,17 +11,17 @@ use crate::net::*;
 
 #[derive(Debug, Clone)]
 pub enum SysEvent<M: Debug + Clone> {
-    MessageSend { 
+    MessageSend {
         msg: M,
         src: ActorId,
         dest: ActorId,
     },
-    MessageReceive { 
+    MessageReceive {
         msg: M,
         src: ActorId,
         dest: ActorId,
     },
-    LocalMessageReceive { 
+    LocalMessageReceive {
         msg: M,
     },
     TimerSet {
@@ -52,7 +52,7 @@ impl<M: Debug + Clone + 'static> System<M> {
         let mut sim = Simulation::<SysEvent<M>>::new(seed);
         let net = Rc::new(RefCell::new(Network::new()));
         sim.add_actor("net", net.clone());
-        Self { 
+        Self {
             sim,
             net,
             nodes: HashMap::new(),
@@ -129,6 +129,38 @@ impl<M: Debug + Clone + 'static> System<M> {
         self.net.borrow_mut().connect_node(node_id);
     }
 
+    pub fn disable_link(&mut self, from: &str, to: &str) {
+        self.net.borrow_mut().disable_link(from, to);
+    }
+
+    pub fn enable_link(&mut self, from: &str, to: &str) {
+        self.net.borrow_mut().enable_link(from, to);
+    }
+
+    pub fn disable_all_links(&mut self) {
+        for from in &self.node_ids {
+            for to in &self.node_ids {
+                if from != to {
+                    self.net.borrow_mut().disable_link(from, to);
+                }
+            }
+        }
+    }
+
+    pub fn enable_all_links(&mut self) {
+        for from in &self.node_ids {
+            for to in &self.node_ids {
+                if from != to {
+                    self.net.borrow_mut().enable_link(from, to);
+                }
+            }
+        }
+    }
+
+    pub fn make_partition(&mut self, group1: &[&str], group2: &[&str]) {
+        self.net.borrow_mut().make_partition(group1, group2);
+    }
+
     pub fn reset_network(&mut self) {
         self.net.borrow_mut().reset_network();
     }
@@ -138,9 +170,9 @@ impl<M: Debug + Clone + 'static> System<M> {
     }
 
     pub fn send(&mut self, msg: M, src: &str, dest: &str) {
-        let event = SysEvent::MessageSend { 
-            msg, 
-            src: ActorId::from(src), 
+        let event = SysEvent::MessageSend {
+            msg,
+            src: ActorId::from(src),
             dest: ActorId::from(dest),
         };
         self.sim.add_event(event, ActorId::from(src), ActorId::from("net"), 0.0);
