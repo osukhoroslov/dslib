@@ -1,6 +1,5 @@
 use std::fmt::{Error, Formatter};
 use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 use pyo3::prelude::*;
 use pyo3::types::{PyModule, PyTuple};
@@ -57,7 +56,8 @@ pub struct PyNodeFactory {
 impl PyNodeFactory {
     pub fn new(node_path: &str, node_class: &str) -> Self {
         let node_code = fs::read_to_string(node_path).unwrap();
-        let node_filename = Path::new(node_path).file_name().unwrap().to_str().unwrap();
+        let node_realpath = fs::canonicalize(node_path).unwrap();
+        let node_filename = node_realpath.to_str().unwrap();
         let node_module = node_filename.replace(".py", "");
         let classes = Python::with_gil(|py| -> (PyObject, PyObject, PyObject) {
             let node_module = PyModule::from_code(
