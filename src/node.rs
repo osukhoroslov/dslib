@@ -2,34 +2,42 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
+use colored::*;
 
 use crate::sim::{Actor, ActorId, ActorContext};
-use crate::system::SysEvent;
+use crate::system::{Message, SysEvent};
+use crate::util::t;
 
 
-pub trait Node<M: Debug + Clone> {
+pub trait Node<M: Message> {
     fn id(&self) -> &String;
     fn on_message(&mut self, msg: M, from: String, ctx: &mut Context<M>);
     fn on_local_message(&mut self, msg: M, ctx: &mut Context<M>);
     fn on_timer(&mut self, timer: String, ctx: &mut Context<M>);
 }
 
-pub struct Context<'a, 'b, 'c, M: Debug + Clone> {
+pub struct Context<'a, 'b, 'c, M: Message> {
     ctx: &'a mut ActorContext<'b, SysEvent<M>>,
     timers: &'c mut HashMap<(ActorId, String), u64>,
     local_events: &'c mut Vec<LocalEvent<M>>,
+    local_mailbox: &'c mut Vec<M>,
+    sent_message_count: &'c mut u64,
 }
 
-impl<'a, 'b, 'c, M: Debug + Clone> Context<'a, 'b, 'c, M> {
+impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
     pub fn new(
         ctx: &'a mut ActorContext<'b, SysEvent<M>>,
         timers: &'c mut HashMap<(ActorId, String), u64>,
         local_events: &'c mut Vec<LocalEvent<M>>,
+        local_mailbox: &'c mut Vec<M>,
+        sent_message_count: &'c mut u64,
     ) -> Self {
         Self {
             ctx,
             timers,
             local_events,
+            local_mailbox,
+            sent_message_count,
         }
     }
 
@@ -39,7 +47,7 @@ impl<'a, 'b, 'c, M: Debug + Clone> Context<'a, 'b, 'c, M> {
 
     pub fn send(&mut self, msg: M, dest: &str) {
         let dest = ActorId::from(dest);
-        println!("{:>9.3} {:>10} --> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), dest.to(), msg);
+        t!("{:>9.3} {:>10} --> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), dest.to(), msg);
         if self.ctx.id == dest {
             let event = SysEvent::MessageReceive { msg, src: self.ctx.id.clone(), dest: dest.clone() };
             self.ctx.emit(event, dest, 0.0);
@@ -47,16 +55,18 @@ impl<'a, 'b, 'c, M: Debug + Clone> Context<'a, 'b, 'c, M> {
             let event = SysEvent::MessageSend { msg, src: self.ctx.id.clone(), dest };
             self.ctx.emit(event, ActorId::from("net"), 0.0);
         }
+        *self.sent_message_count += 1;
     }
 
     pub fn send_local(&mut self, msg: M) {
-        println!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg);
+        t!(format!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg).cyan());
         let event = LocalEvent {
             time: self.time(),
-            msg: Some(msg),
+            msg: Some(msg.clone()),
             tip: LocalEventType::LocalMessageSend
         };
         self.local_events.push(event);
+        self.local_mailbox.push(msg);
     }
 
     pub fn set_timer(&mut self, name: &str, delay: f64) {
@@ -83,7 +93,7 @@ pub enum LocalEventType {
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalEvent<M: Debug + Clone> {
+pub struct LocalEvent<M: Message> {
     pub time: f64,
     pub msg: Option<M>,
     pub tip: LocalEventType
@@ -94,20 +104,26 @@ enum NodeStatus {
     Crashed,
 }
 
-pub struct NodeActor<M: Debug + Clone> {
+pub struct NodeActor<M: Message> {
     node: Rc<RefCell<dyn Node<M>>>,
     timers: HashMap<(ActorId, String), u64>,
     local_events: Vec<LocalEvent<M>>,
+    local_mailbox: Vec<M>,
     status: NodeStatus,
+    sent_message_count: u64,
+    received_message_count: u64,
 }
 
-impl<M: Debug + Clone> NodeActor<M> {
+impl<M: Message> NodeActor<M> {
     pub fn new(node: Rc<RefCell<dyn Node<M>>>) -> Self {
         Self {
             node,
             timers: HashMap::new(),
             local_events: Vec::new(),
+            local_mailbox: Vec::new(),
             status: NodeStatus::Healthy,
+            sent_message_count: 0,
+            received_message_count: 0,
         }
     }
 
@@ -115,35 +131,58 @@ impl<M: Debug + Clone> NodeActor<M> {
         self.local_events.clone()
     }
 
+    pub fn check_mailbox(&mut self) -> Option<Vec<M>> {
+        if self.local_mailbox.len() > 0 {
+            Some(self.local_mailbox.drain(..).collect())
+        } else {
+            None
+        }
+    }
+
+    pub fn sent_message_count(&self) -> u64 {
+        self.sent_message_count
+    }
+
+    pub fn received_message_count(&self) -> u64 {
+        self.received_message_count
+    }
+
     pub fn crash(&mut self) {
         self.status = NodeStatus::Crashed;
     }
 }
 
-impl<M: Debug + Clone> Actor<SysEvent<M>> for NodeActor<M> {
+impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
     fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>) {
         match self.status {
             NodeStatus::Healthy => {
                 match event {
                     SysEvent::MessageReceive { msg, src, dest } => {
-                        println!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
-                        let mut node_ctx = Context::new(ctx, &mut self.timers, &mut self.local_events);
+                        t!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
+                        let mut node_ctx = Context::new(
+                            ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
+                            &mut self.sent_message_count);
                         self.node.borrow_mut().on_message(msg, src.to(), &mut node_ctx);
+                        self.received_message_count += 1;
                     }
                     SysEvent::LocalMessageReceive { msg } => {
-                        println!("{:>9.3} {:>10} <<< {:<10} {:?}", ctx.time(), ctx.id.to(), "local", msg);
+                        t!(format!("{:>9.3} {:>10} <<< {:<10} {:?}", ctx.time(), ctx.id.to(), "local", msg).cyan());
                         self.local_events.push(LocalEvent {
                             time: ctx.time(),
                             msg: Some(msg.clone()),
                             tip: LocalEventType::LocalMessageReceive
                         });
-                        let mut node_ctx = Context::new(ctx, &mut self.timers, &mut self.local_events);
+                        let mut node_ctx = Context::new(
+                            ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
+                            &mut self.sent_message_count);
                         self.node.borrow_mut().on_local_message(msg, &mut node_ctx);
                     }
                     SysEvent::TimerFired { name } => {
-                        println!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name);
+                        t!(format!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name).magenta());
                         self.timers.remove(&(ctx.id.clone(), name.clone()));
-                        let mut node_ctx = Context::new(ctx, &mut self.timers, &mut self.local_events);
+                        let mut node_ctx = Context::new(
+                            ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
+                            &mut self.sent_message_count);
                         self.node.borrow_mut().on_timer(name, &mut node_ctx);
                     }
                     _ => ()

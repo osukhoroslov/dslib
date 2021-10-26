@@ -192,14 +192,23 @@ impl<E: Debug> Simulation<E> {
         }
     }
 
-    pub fn steps(&mut self, step_count: u32) {
+    pub fn steps(&mut self, step_count: u32) -> bool {
         for _i in 0..step_count {
-            self.step();
+            if !self.step() {
+                return false
+            }
         }
+        true
     }
 
     pub fn step_until_no_events(&mut self) {
         while self.step() {
+        }
+    }
+
+    pub fn step_for_duration(&mut self, duration: f64) {
+        let end_time = self.time() + duration;
+        while self.step() && self.time() < end_time {
         }
     }
 

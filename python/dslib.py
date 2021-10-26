@@ -59,10 +59,6 @@ class Context(object):
     def time(self) -> float:
         return self._time
 
-    def rand(self) -> float:
-        # TODO: use global random initialized with simulation seed
-        return random.uniform(0, 1)
-
 
 class Node:
     @abc.abstractmethod

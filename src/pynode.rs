@@ -7,6 +7,7 @@ use pyo3::types::{PyModule, PyTuple};
 use serde::Serialize;
 
 use crate::node::{Node, Context};
+use crate::system::Message;
 
 
 #[derive(Clone)]
@@ -41,6 +42,12 @@ impl std::fmt::Debug for JsonMessage {
     }
 }
 
+impl Message for JsonMessage {
+    fn size(&self) -> u64 {
+        self.data.len() as u64
+    }
+}
+
 pub struct PyNodeFactory {
     node_class: PyObject,
     msg_class: Rc<PyObject>,
@@ -67,8 +74,9 @@ impl PyNodeFactory {
         }
     }
 
-    pub fn build(&self, node_id: &str, args: impl IntoPy<Py<PyTuple>>) -> PyNode {
+    pub fn build(&self, node_id: &str, args: impl IntoPy<Py<PyTuple>>, seed: u64) -> PyNode {
         let node = Python::with_gil(|py| -> PyObject {
+            py.run(format!("import random\nrandom.seed({})", seed).as_str(), None, None).unwrap();
             self.node_class.call1(py, args).unwrap().to_object(py)
         });
         PyNode { 

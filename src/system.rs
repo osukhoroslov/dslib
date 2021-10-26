@@ -2,15 +2,21 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
+use colored::*;
 use rand::prelude::*;
 
 use crate::sim::*;
 use crate::node::*;
 use crate::net::*;
+use crate::util::t;
 
+
+pub trait Message: Debug + Clone {
+    fn size(&self) -> u64;
+}
 
 #[derive(Debug, Clone)]
-pub enum SysEvent<M: Debug + Clone> {
+pub enum SysEvent<M: Message> {
     MessageSend {
         msg: M,
         src: ActorId,
@@ -33,7 +39,7 @@ pub enum SysEvent<M: Debug + Clone> {
     }
 }
 
-pub struct System<M: Debug + Clone> {
+pub struct System<M: Message> {
     sim: Simulation<SysEvent<M>>,
     net: Rc<RefCell<Network>>,
     nodes: HashMap<String, Rc<RefCell<NodeActor<M>>>>,
@@ -41,7 +47,7 @@ pub struct System<M: Debug + Clone> {
     crashed_nodes: HashSet<String>,
 }
 
-impl<M: Debug + Clone + 'static> System<M> {
+impl<M: Message + 'static> System<M> {
     pub fn new() -> Self {
         let seed: u64 = thread_rng().gen_range(1..1_000_000);
         println!("Seed: {}", seed);
@@ -65,8 +71,20 @@ impl<M: Debug + Clone + 'static> System<M> {
         let id = node.borrow().id().to_string();
         let actor = Rc::new(RefCell::new(NodeActor::new(node)));
         self.sim.add_actor(&id, actor.clone());
+        if self.nodes.contains_key(&id) {
+            if self.crashed_nodes.contains(&id) {
+                // crashed node is recovered
+                self.crashed_nodes.remove(&id);
+                self.net.borrow_mut().node_recovered(&id);
+                t!(format!("{:>9.3} {:>10} RECOVERED", self.sim.time(), &id).green().bold());
+            } else {
+                // node is restarted
+                t!(format!("{:>9.3} {:>10} RESTARTED", self.sim.time(), &id).green().bold());
+            }
+        } else {
+            self.node_ids.push(id.clone());
+        }
         self.nodes.insert(id.clone(), actor);
-        self.node_ids.push(id);
     }
 
     pub fn get_node_ids(&self) -> Vec<String> {
@@ -74,7 +92,7 @@ impl<M: Debug + Clone + 'static> System<M> {
     }
 
     pub fn crash_node(&mut self, node_id: &str) {
-        println!("{:>9.3} {:>10} CRASHED!", self.sim.time(), node_id);
+        t!(format!("{:>9.3} {:>10} CRASHED!", self.sim.time(), node_id).red().bold());
         self.crashed_nodes.insert(node_id.to_string());
         let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
         node.crash();
@@ -106,6 +124,7 @@ impl<M: Debug + Clone + 'static> System<M> {
     }
 
     pub fn drop_incoming(&mut self, node_id: &str) {
+        t!(format!("{:>9.3} {:>10} DROPPING INCOMING", self.sim.time(), node_id).red());
         self.net.borrow_mut().drop_incoming(node_id);
     }
 
@@ -122,18 +141,22 @@ impl<M: Debug + Clone + 'static> System<M> {
     }
 
     pub fn disconnect_node(&mut self, node_id: &str) {
+        t!(format!("{:>9.3} {:>10} DISCONNECTED", self.sim.time(), node_id).red());
         self.net.borrow_mut().disconnect_node(node_id);
     }
 
     pub fn connect_node(&mut self, node_id: &str) {
+        t!(format!("{:>9.3} {:>10} CONNECTED", self.sim.time(), node_id).green());
         self.net.borrow_mut().connect_node(node_id);
     }
 
     pub fn disable_link(&mut self, from: &str, to: &str) {
+        t!(format!("{:>9.3} {:>10} --> {:<10} LINK DISABLED", self.sim.time(), from, to).red());
         self.net.borrow_mut().disable_link(from, to);
     }
 
     pub fn enable_link(&mut self, from: &str, to: &str) {
+        t!(format!("{:>9.3} {:>10} --> {:<10} LINK ENABLED", self.sim.time(), from, to).green());
         self.net.borrow_mut().enable_link(from, to);
     }
 
@@ -158,6 +181,7 @@ impl<M: Debug + Clone + 'static> System<M> {
     }
 
     pub fn make_partition(&mut self, group1: &[&str], group2: &[&str]) {
+        t!(format!("{:>9.3} NETWORK PARTITION {:?} {:?}", self.sim.time(), group1, group2).red());
         self.net.borrow_mut().make_partition(group1, group2);
     }
 
@@ -167,6 +191,18 @@ impl<M: Debug + Clone + 'static> System<M> {
 
     pub fn get_network_message_count(&self) -> u64 {
         self.net.borrow().get_message_count()
+    }
+
+    pub fn get_network_traffic(&self) -> u64 {
+        self.net.borrow().get_traffic()
+    }
+
+    pub fn get_sent_message_count(&self, node_id: &str) -> u64 {
+        self.nodes.get(node_id).unwrap().borrow().sent_message_count()
+    }
+
+    pub fn get_received_message_count(&self, node_id: &str) -> u64 {
+        self.nodes.get(node_id).unwrap().borrow().received_message_count()
     }
 
     pub fn send(&mut self, msg: M, src: &str, dest: &str) {
@@ -185,11 +221,15 @@ impl<M: Debug + Clone + 'static> System<M> {
         self.sim.add_event(event, src, dest, 0.0);
     }
 
+    pub fn time(&self) -> f64 {
+        self.sim.time()
+    }
+
     pub fn step(&mut self) -> bool {
         self.sim.step()
     }
 
-    pub fn steps(&mut self, step_count: u32) {
+    pub fn steps(&mut self, step_count: u32) -> bool {
         self.sim.steps(step_count)
     }
 
@@ -197,9 +237,40 @@ impl<M: Debug + Clone + 'static> System<M> {
         self.sim.step_until_no_events()
     }
 
+    pub fn step_for_duration(&mut self, duration: f64) {
+        self.sim.step_for_duration(duration)
+    }
+
+    pub fn step_until_local_message(&mut self, node_id: &str) -> Result<Vec<M>,&str> {
+        while self.step() {
+            match self.check_mailbox(node_id) {
+                Some(messages) => return Ok(messages),
+                None => ()
+            }
+        }
+        Err("No messages")
+    }
+
+    pub fn step_until_local_message_max_steps(&mut self, node_id: &str, max_steps: u32) -> Result<Vec<M>,&str> {
+        let mut steps = 0;
+        while self.step() && steps <= max_steps {
+            match self.check_mailbox(node_id) {
+                Some(messages) => return Ok(messages),
+                None => ()
+            }
+            steps += 1;
+        }
+        Err("No messages")
+    }
+
     pub fn get_local_events(&self, node_id: &str) -> Vec<LocalEvent<M>> {
         let node = self.nodes.get(node_id).unwrap().borrow();
         node.get_local_events()
+    }
+
+    pub fn check_mailbox(&mut self, node_id: &str) -> Option<Vec<M>> {
+        let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
+        node.check_mailbox()
     }
 
     pub fn count_undelivered_events(&mut self) -> usize {

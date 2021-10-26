@@ -1,8 +1,9 @@
 use std::collections::HashSet;
-use std::fmt::Debug;
+use colored::*;
 
 use crate::sim::{Actor, ActorContext};
-use crate::system::SysEvent;
+use crate::system::{SysEvent, Message};
+use crate::util::t;
 
 
 pub struct Network {
@@ -16,6 +17,7 @@ pub struct Network {
     drop_outgoing: HashSet<String>,
     disabled_links: HashSet<(String, String)>,
     message_count: u64,
+    traffic: u64,
 }
 
 impl Network {
@@ -31,6 +33,7 @@ impl Network {
             drop_outgoing: HashSet::new(),
             disabled_links: HashSet::new(),
             message_count: 0,
+            traffic: 0,
         }
     }
 
@@ -58,6 +61,10 @@ impl Network {
 
     pub fn node_crashed(&mut self, node_id: &str) {
         self.crashed_nodes.insert(node_id.to_string());
+    }
+
+    pub fn node_recovered(&mut self, node_id: &str) {
+        self.crashed_nodes.remove(node_id);
     }
 
     pub fn drop_incoming(&mut self, node_id: &str) {
@@ -112,12 +119,17 @@ impl Network {
     pub fn get_message_count(&self) -> u64 {
         self.message_count
     }
+
+    pub fn get_traffic(&self) -> u64 {
+        self.traffic
+    }
 }
 
-impl<M: Debug + Clone> Actor<SysEvent<M>> for Network {
+impl<M: Message> Actor<SysEvent<M>> for Network {
     fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>) {
         match event {
             SysEvent::MessageSend { msg, src, dest } => {
+                let msg_size = msg.size();
                 if !self.crashed_nodes.contains(&src.to()) {
                     if ctx.rand() >= self.drop_rate 
                         && !self.drop_outgoing.contains(&src.to())
@@ -138,13 +150,14 @@ impl<M: Debug + Clone> Actor<SysEvent<M>> for Network {
                             }
                         }
                     } else {
-                        println!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
-                                 "!!!", src.to(), dest.to(), msg);
+                        t!(format!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
+                                 "!!!", src.to(), dest.to(), msg).yellow());
                     }
                 } else {
-                    println!("!!! Discarded message from crashed node {:?}", msg);
+                    t!(format!("Discarded message from crashed node {:?}", msg).yellow());
                 }
                 self.message_count += 1;
+                self.traffic += msg_size;
             }
             _ => (),
         }

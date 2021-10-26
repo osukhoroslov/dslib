@@ -48,4 +48,16 @@ impl<T> TestSuite<T> {
             std::process::exit(0);
         }
     }
+
+    pub fn run_test(&mut self, name: &str) {
+        for test in &self.tests {
+            if test.name == name {
+                println!("\n--- {} ---\n", test.name);
+                match (test.func)(&test.config) {
+                    Ok(_) => println!("\nPASSED\n"),
+                    Err(e) => println!("\nFAILED: {}\n", e)
+                }
+            }
+        }
+    }
 }
