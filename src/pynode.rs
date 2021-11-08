@@ -78,8 +78,8 @@ impl PyNodeFactory {
         let node = Python::with_gil(|py| -> PyObject {
             py.run(format!("import random\nrandom.seed({})", seed).as_str(), None, None).unwrap();
             self.node_class.call1(py, args)
-            .map_err(|e| log_python_error(e, py))
-            .unwrap().to_object(py)
+                .map_err(|e| log_python_error(e, py))
+                .unwrap().to_object(py)
         });
         PyNode {
             id: node_id.to_string(),
