@@ -77,13 +77,15 @@ impl PyNodeFactory {
     pub fn build(&self, node_id: &str, args: impl IntoPy<Py<PyTuple>>, seed: u64) -> PyNode {
         let node = Python::with_gil(|py| -> PyObject {
             py.run(format!("import random\nrandom.seed({})", seed).as_str(), None, None).unwrap();
-            self.node_class.call1(py, args).unwrap().to_object(py)
+            self.node_class.call1(py, args)
+            .map_err(|e| log_python_error(e, py))
+            .unwrap().to_object(py)
         });
-        PyNode { 
-            id: node_id.to_string(), 
-            node, 
-            msg_class: self.msg_class.clone(), 
-            ctx_class: self.ctx_class.clone(), 
+        PyNode {
+            id: node_id.to_string(),
+            node,
+            msg_class: self.msg_class.clone(),
+            ctx_class: self.ctx_class.clone(),
         }
     }
 }
@@ -143,7 +145,7 @@ impl Node<JsonMessage> for PyNode {
                 .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
-    }    
+    }
 
     fn on_timer(&mut self, timer: String, ctx: &mut Context<JsonMessage>) {
         Python::with_gil(|py| {
