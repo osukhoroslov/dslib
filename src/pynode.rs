@@ -107,13 +107,13 @@ impl PyNode {
         for m in sent_local {
             ctx.send_local(JsonMessage::new(&m.0, &m.1));
         }
-        let set_timers: Vec<(String, f64)> = py_ctx.getattr(py, "_set_timers").unwrap().extract(py).unwrap();
-        for t in set_timers {
-            ctx.set_timer(&t.0, t.1);
-        }
-        let canceled_timers: Vec<String> = py_ctx.getattr(py, "_canceled_timers").unwrap().extract(py).unwrap();
-        for t in canceled_timers {
-            ctx.cancel_timer(&t);
+        let timer_actions: Vec<(String, String, f64)> = py_ctx.getattr(py, "_timer_actions").unwrap().extract(py).unwrap();
+        for t in timer_actions {
+            if t.0 == "s" {
+                ctx.set_timer(&t.1, t.2);
+            } else {
+                ctx.cancel_timer(&t.1);    
+            }
         }
     }
 }
