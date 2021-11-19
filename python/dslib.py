@@ -48,6 +48,8 @@ class Context(object):
             raise TypeError('timer_id argument has to be str, not {}'.format(type(timer_id)))
         if not isinstance(delay, (int, float)):
             raise TypeError('delay argument has to be int or float, not {}'.format(type(delay)))
+        if delay < 0:
+            raise ValueError('delay argument has to be non-negative')
         self._timer_actions.append((timer_id, delay))
     
     def cancel_timer(self, timer_id: str):
