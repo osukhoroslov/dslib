@@ -33,8 +33,7 @@ class Context(object):
         self._time = time
         self._sent_messages: List[Tuple[str, str, str]] = list()
         self._sent_local_messages: List[tuple[str, str]] = list()
-        self._set_timers: List[Tuple[str, float]] = list()
-        self._canceled_timers: List[str] = list()
+        self._timer_actions: List[Tuple[str, float]] = list()
 
     def send(self, msg: Message, to: str):
         if not isinstance(to, str):
@@ -49,12 +48,12 @@ class Context(object):
             raise TypeError('timer_id argument has to be str, not {}'.format(type(timer_id)))
         if not isinstance(delay, (int, float)):
             raise TypeError('delay argument has to be int or float, not {}'.format(type(delay)))
-        self._set_timers.append((timer_id, delay))
+        self._timer_actions.append((timer_id, delay))
     
     def cancel_timer(self, timer_id: str):
         if not isinstance(timer_id, str):
             raise TypeError('timer_id argument has to be str, not {}'.format(type(timer_id)))
-        self._canceled_timers.append(timer_id)
+        self._timer_actions.append((timer_id, -1))
 
     def time(self) -> float:
         return self._time
