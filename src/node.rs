@@ -22,6 +22,7 @@ pub struct Context<'a, 'b, 'c, M: Message> {
     local_events: &'c mut Vec<LocalEvent<M>>,
     local_mailbox: &'c mut Vec<M>,
     sent_message_count: &'c mut u64,
+    clock_skew: f64,
 }
 
 impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
@@ -31,6 +32,7 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
         local_events: &'c mut Vec<LocalEvent<M>>,
         local_mailbox: &'c mut Vec<M>,
         sent_message_count: &'c mut u64,
+        clock_skew: f64,
     ) -> Self {
         Self {
             ctx,
@@ -38,11 +40,12 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
             local_events,
             local_mailbox,
             sent_message_count,
+            clock_skew,
         }
     }
 
-    pub fn time(&self) -> f64 {
-        self.ctx.time()
+    pub fn time(&mut self) -> f64 {
+        self.ctx.time() + self.clock_skew
     }
 
     pub fn send(&mut self, msg: M, dest: &str) {
@@ -112,6 +115,7 @@ pub struct NodeActor<M: Message> {
     status: NodeStatus,
     sent_message_count: u64,
     received_message_count: u64,
+    clock_skew: f64,
 }
 
 impl<M: Message> NodeActor<M> {
@@ -124,6 +128,7 @@ impl<M: Message> NodeActor<M> {
             status: NodeStatus::Healthy,
             sent_message_count: 0,
             received_message_count: 0,
+            clock_skew: 0.0,
         }
     }
 
@@ -150,6 +155,10 @@ impl<M: Message> NodeActor<M> {
     pub fn crash(&mut self) {
         self.status = NodeStatus::Crashed;
     }
+
+    pub fn set_clock_skew(&mut self, clock_skew: f64) {
+        self.clock_skew = clock_skew
+    }
 }
 
 impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
@@ -161,7 +170,7 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         t!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
-                            &mut self.sent_message_count);
+                            &mut self.sent_message_count, self.clock_skew);
                         self.node.borrow_mut().on_message(msg, src.to(), &mut node_ctx);
                         self.received_message_count += 1;
                     }
@@ -174,7 +183,7 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         });
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
-                            &mut self.sent_message_count);
+                            &mut self.sent_message_count, self.clock_skew);
                         self.node.borrow_mut().on_local_message(msg, &mut node_ctx);
                     }
                     SysEvent::TimerFired { name } => {
@@ -182,7 +191,7 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         self.timers.remove(&(ctx.id.clone(), name.clone()));
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
-                            &mut self.sent_message_count);
+                            &mut self.sent_message_count, self.clock_skew);
                         self.node.borrow_mut().on_timer(name, &mut node_ctx);
                     }
                     _ => ()

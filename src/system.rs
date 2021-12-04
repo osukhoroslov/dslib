@@ -91,6 +91,11 @@ impl<M: Message + 'static> System<M> {
         self.node_ids.clone()
     }
 
+    pub fn set_clock_skew(&mut self, node_id: &str, clock_skew: f64) {
+        let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
+        node.set_clock_skew(clock_skew);
+    }
+
     pub fn crash_node(&mut self, node_id: &str) {
         t!(format!("{:>9.3} {:>10} CRASHED!", self.sim.time(), node_id).red().bold());
         self.crashed_nodes.insert(node_id.to_string());
