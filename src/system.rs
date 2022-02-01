@@ -9,10 +9,15 @@ use crate::sim::*;
 use crate::node::*;
 use crate::net::*;
 use crate::util::t;
+use crate::pynode::{JsonMessage};
+
+use crate::debugger;
+use crate::debugger::DebugEvent;
 
 
 pub trait Message: Debug + Clone {
     fn size(&self) -> u64;
+    fn to_json(&self) -> JsonMessage;
 }
 
 #[derive(Debug, Clone)]
@@ -76,9 +81,17 @@ impl<M: Message + 'static> System<M> {
                 // crashed node is recovered
                 self.crashed_nodes.remove(&id);
                 self.net.borrow_mut().node_recovered(&id);
+                debugger::add_event(DebugEvent::NodeRecovered{
+                    node: id.clone(),
+                    ts: self.sim.time()
+                });
                 t!(format!("{:>9.3} {:>10} RECOVERED", self.sim.time(), &id).green().bold());
             } else {
                 // node is restarted
+                debugger::add_event(DebugEvent::NodeRestarted{
+                    node: id.clone(),
+                    ts: self.sim.time()
+                });
                 t!(format!("{:>9.3} {:>10} RESTARTED", self.sim.time(), &id).green().bold());
             }
         } else {
@@ -92,6 +105,10 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn crash_node(&mut self, node_id: &str) {
+        debugger::add_event(DebugEvent::NodeCrashed{
+            node: String::from(node_id),
+            ts: self.sim.time()
+        });
         t!(format!("{:>9.3} {:>10} CRASHED!", self.sim.time(), node_id).red().bold());
         self.crashed_nodes.insert(node_id.to_string());
         let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
@@ -141,21 +158,39 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn disconnect_node(&mut self, node_id: &str) {
+        debugger::add_event(DebugEvent::NodeDisconnected{
+            node: String::from(node_id),
+            ts: self.sim.time()
+        });
         t!(format!("{:>9.3} {:>10} DISCONNECTED", self.sim.time(), node_id).red());
         self.net.borrow_mut().disconnect_node(node_id);
     }
 
     pub fn connect_node(&mut self, node_id: &str) {
+        debugger::add_event(DebugEvent::NodeConnected{
+            node: String::from(node_id),
+            ts: self.sim.time()
+        });
         t!(format!("{:>9.3} {:>10} CONNECTED", self.sim.time(), node_id).green());
         self.net.borrow_mut().connect_node(node_id);
     }
 
     pub fn disable_link(&mut self, from: &str, to: &str) {
+        debugger::add_event(DebugEvent::LinkDisabled{
+            src: String::from(from),
+            dst: String::from(to),
+            ts: self.sim.time()
+        });
         t!(format!("{:>9.3} {:>10} --> {:<10} LINK DISABLED", self.sim.time(), from, to).red());
         self.net.borrow_mut().disable_link(from, to);
     }
 
     pub fn enable_link(&mut self, from: &str, to: &str) {
+        debugger::add_event(DebugEvent::LinkEnabled{
+            src: String::from(from),
+            dst: String::from(to),
+            ts: self.sim.time()
+        });
         t!(format!("{:>9.3} {:>10} --> {:<10} LINK ENABLED", self.sim.time(), from, to).green());
         self.net.borrow_mut().enable_link(from, to);
     }
@@ -181,6 +216,11 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn make_partition(&mut self, group1: &[&str], group2: &[&str]) {
+        debugger::add_event(DebugEvent::NetworkPartition{
+            group1: format!("{:?}", group1),
+            group2: format!("{:?}", group2),
+            ts: self.sim.time()
+        });
         t!(format!("{:>9.3} NETWORK PARTITION {:?} {:?}", self.sim.time(), group1, group2).red());
         self.net.borrow_mut().make_partition(group1, group2);
     }

@@ -5,3 +5,4 @@ pub mod node;
 pub mod pynode;
 pub mod test;
 pub mod util;
+pub mod debugger;

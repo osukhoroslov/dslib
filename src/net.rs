@@ -5,6 +5,9 @@ use crate::sim::{Actor, ActorContext};
 use crate::system::{SysEvent, Message};
 use crate::util::t;
 
+use crate::debugger;
+use crate::debugger::DebugEvent;
+
 
 pub struct Network {
     min_delay: f64,
@@ -150,10 +153,22 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
                             }
                         }
                     } else {
+                        debugger::add_event(DebugEvent::MessageDropped{
+                            msg: msg.to_json(),
+                            src: src.to(),
+                            dst: dest.to(),
+                            ts: ctx.time()
+                        });
                         t!(format!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
                                  "!!!", src.to(), dest.to(), msg).yellow());
                     }
                 } else {
+                    debugger::add_event(DebugEvent::MessageDiscarded{
+                        msg: msg.to_json(),
+                        src: src.to(),
+                        dst: dest.to(),
+                        ts: ctx.time()
+                    });
                     t!(format!("Discarded message from crashed node {:?}", msg).yellow());
                 }
                 self.message_count += 1;
