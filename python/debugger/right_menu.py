@@ -45,34 +45,46 @@ class DisplayedMsgSend(DisplayedEvent):
         pixmap = QtGui.QPixmap(QtGui.QImage(f'{STATIC_PATH}/pics/envelope.png')).scaledToWidth(node_icon_size[0] // 2)
         self._envelope_size = (pixmap.width(), pixmap.height())
         self._envelope = QtWidgets.QGraphicsPixmapItem(pixmap)
+
         self._envelope_positions = self._calc_envelope_positions()
         self._envelope_pos_idx = 0
-        self._envelope.setPos(
-            self._envelope_positions[0][0],
-            self._envelope_positions[0][1]
-        )
         
         self._timer = QtCore.QTimer()
         self._timer.timeout.connect(self.advance_envelope)
+
+        self.is_received = False  # TODO: wrap in setter function
     
     def mouseReleaseEvent(self, ev: QtGui.QMouseEvent) -> None:
         if not self._is_selected:
             self._main_lbl.setStyleSheet(f'background-color: {self._color};')
             self.draw_line()
+            self._line.setPen(QtGui.QPen(QtGui.QColor('red'), 3))
+            self._line.setZValue(1)  # this brings line to the top of all other items to be seen
         else:
             self._main_lbl.setStyleSheet('')
-            self.remove_line()
+            self._line.setPen(QtGui.QPen(QtGui.QColor(self._color), 3))
+            self._line.setZValue(0)
+            if self.is_received:
+                self.remove_line()
         self._is_selected = not self._is_selected
         return super().mouseReleaseEvent(ev)
     
     def enterEvent(self, event: QtCore.QEvent) -> None:
         if not self._is_selected:
             self._main_lbl.setStyleSheet(f'background-color: {self._color};')
+            self.draw_line()
+            self._line.setPen(QtGui.QPen(QtGui.QColor('red'), 3))
+            self._line.setZValue(1)
         return super().enterEvent(event)
     
     def leaveEvent(self, event: QtCore.QEvent) -> None:
         if not self._is_selected:
             self._main_lbl.setStyleSheet('')
+            if self._line is not None:
+                self._line.setPen(QtGui.QPen(QtGui.QColor(self._color), 3))
+                self._line.setZValue(0)
+            if self.is_received:
+                self.remove_line()
         return super().leaveEvent(event)
     
     def draw_line(self):
@@ -97,6 +109,13 @@ class DisplayedMsgSend(DisplayedEvent):
         )
         self._line = self._display.scene().addLine(
             src_x, src_y, dst_x, dst_y, QtGui.QPen(QtGui.QColor(self._color), 3)
+        )
+
+        self._envelope_positions = self._calc_envelope_positions()
+        self._envelope_pos_idx = 0
+        self._envelope.setPos(
+            self._envelope_positions[0][0],
+            self._envelope_positions[0][1]
         )
         self._display.scene().addItem(self._envelope)
         self._timer.start(NEXT_STEP_DELAY / EVENT_STEP_TO_ANIM_STEP_RATIO)
@@ -172,27 +191,30 @@ class DisplayedMsgRcv(DisplayedEvent):
         if not self._is_selected:
             self._main_lbl.setStyleSheet(f'background-color: {self._color};')
             self.draw_line()
+            self._line.setZValue(1)
         else:
             self._main_lbl.setStyleSheet('')
             self.remove_line()
         self._is_selected = not self._is_selected
         return super().mouseReleaseEvent(ev)
-
+    
     def enterEvent(self, event: QtCore.QEvent) -> None:
         if not self._is_selected:
             self._main_lbl.setStyleSheet(f'background-color: {self._color};')
+            self.draw_line()
+            self._line.setZValue(1)
         return super().enterEvent(event)
     
     def leaveEvent(self, event: QtCore.QEvent) -> None:
         if not self._is_selected:
             self._main_lbl.setStyleSheet('')
+            self.remove_line()
         return super().leaveEvent(event)
 
     def draw_line(self):
-        src_node, dst_node = (
-            self._display.displayed_nodes[self._event.data['src']],
-            self._display.displayed_nodes[self._event.data['dst']]
-        )
+        if self._line is not None:
+            print(f"Line already drawn {self._event.data['dst']} <-- {self._event.data['src']}")  # TODO: remove this
+            return
         src_node, dst_node = (
             self._display.displayed_nodes[self._event.data['src']],
             self._display.displayed_nodes[self._event.data['dst']]
@@ -214,6 +236,9 @@ class DisplayedMsgRcv(DisplayedEvent):
         )
     
     def remove_line(self):
+        if self._line is None:
+            print(f"Line already removed {self._event.data['dst']} <-- {self._event.data['src']}")  # TODO: remove this
+            return
         src_node, dst_node = (
             self._display.displayed_nodes[self._event.data['src']],
             self._display.displayed_nodes[self._event.data['dst']]
@@ -225,13 +250,146 @@ class DisplayedMsgRcv(DisplayedEvent):
         self._line = None
 
 
+class DisplayedMsgLocal(DisplayedEvent):
+    def __init__(self, event: Event, display: CentralDisplay, parent: t.Optional[QtWidgets.QWidget] = None) -> None:
+        DisplayedEvent.__init__(self, event, display, parent)
+        caption = (
+            f'{event.data["ts"]:.3f} | {event.data["dst"]} >>> local | {event.data["msg"]["type"]}'
+        )
+        self._main_lbl = QtWidgets.QLabel(self)
+        self._main_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._main_lbl.setText(caption)
+        self._main_layout.addWidget(self._main_lbl, *DISPLAYED_EVENT_GRID[0])
+
+        self._msg_viewer = JsonViewer(event.data['msg']['data'], self)
+        self._main_layout.addWidget(self._msg_viewer, *DISPLAYED_EVENT_GRID[1])
+
+        self._is_selected = False
+        self._color: str = OnMouseEventColor.LOCAL_MESSAGE
+
+    def show_event(self):
+        self._display.displayed_nodes[self._event.data['dst']].show_local_user()
+
+    def hide_event(self):
+        self._display.displayed_nodes[self._event.data['dst']].hide_local_user()
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        if not self._is_selected:
+            self._main_lbl.setStyleSheet(f'background-color: {self._color};')
+            self._display.displayed_nodes[self._event.data['dst']].show_border()
+            self._display.displayed_nodes[self._event.data['dst']].show_local_user()
+        else:
+            self._main_lbl.setStyleSheet('')
+            self._display.displayed_nodes[self._event.data['dst']].hide_border()
+            self._display.displayed_nodes[self._event.data['dst']].hide_local_user()
+        self._is_selected = not self._is_selected
+        return super().mouseReleaseEvent(event)
+    
+    def enterEvent(self, event: QtCore.QEvent) -> None:
+        if not self._is_selected:
+            self._main_lbl.setStyleSheet(f'background-color: {self._color};')
+            self._display.displayed_nodes[self._event.data['dst']].show_border()
+            self._display.displayed_nodes[self._event.data['dst']].show_local_user()
+        return super().enterEvent(event)
+    
+    def leaveEvent(self, event: QtCore.QEvent) -> None:
+        if not self._is_selected:
+            self._main_lbl.setStyleSheet('')
+            self._display.displayed_nodes[self._event.data['dst']].hide_border()
+            self._display.displayed_nodes[self._event.data['dst']].hide_local_user()
+        return super().leaveEvent(event)
+
+
+class DisplayedMsgDrop(DisplayedEvent):
+    def __init__(self, event: Event, display: CentralDisplay, parent: t.Optional[QtWidgets.QWidget] = None) -> None:
+        DisplayedEvent.__init__(self, event, display, parent)
+
+        caption = (
+            f'{event.data["ts"]:.3f} | {event.data["src"]} --x {event.data["dst"]} | {event.data["msg"]["type"]}'
+        )
+        self._main_lbl = QtWidgets.QLabel(self)
+        self._main_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        self._main_lbl.setText(caption)
+        self._main_layout.addWidget(self._main_lbl, *DISPLAYED_EVENT_GRID[0])
+
+        self._msg_viewer = JsonViewer(event.data['msg']['data'], self)
+        self._main_layout.addWidget(self._msg_viewer, *DISPLAYED_EVENT_GRID[1])
+
+        self._is_selected = False
+        self._line: t.Optional[QtWidgets.QGraphicsLineItem] = None
+        self._color: str = OnMouseEventColor.MESSAGE_DROPPED
+    
+    def mouseReleaseEvent(self, ev: QtGui.QMouseEvent) -> None:
+        if not self._is_selected:
+            self._main_lbl.setStyleSheet(f'background-color: {self._color};')
+            self.draw_line()
+            self._line.setZValue(1)
+        else:
+            self._main_lbl.setStyleSheet('')
+            self.remove_line()
+        self._is_selected = not self._is_selected
+        return super().mouseReleaseEvent(ev)
+    
+    def enterEvent(self, event: QtCore.QEvent) -> None:
+        if not self._is_selected:
+            self._main_lbl.setStyleSheet(f'background-color: {self._color};')
+            self.draw_line()
+            self._line.setZValue(1)
+        return super().enterEvent(event)
+    
+    def leaveEvent(self, event: QtCore.QEvent) -> None:
+        if not self._is_selected:
+            self._main_lbl.setStyleSheet('')
+            self.remove_line()
+        return super().leaveEvent(event)
+
+    def draw_line(self):
+        if self._line is not None:
+            print(f"Line already drawn {self._event.data['dst']} <-- {self._event.data['src']}")  # TODO: remove this
+            return
+        src_node, dst_node = (
+            self._display.displayed_nodes[self._event.data['src']],
+            self._display.displayed_nodes[self._event.data['dst']]
+        )
+        src_node.update_conn_counter(1)
+        dst_node.update_conn_counter(1)
+
+        node_icon_size = self._display.get_node_icon_size()
+        src_x, src_y = (
+            src_node.scenePos().x() + node_icon_size[0] // 2,
+            src_node.scenePos().y() + node_icon_size[1] // 2
+        )
+        dst_x, dst_y = (
+            dst_node.scenePos().x() + node_icon_size[0] // 2,
+            dst_node.scenePos().y() + node_icon_size[1] // 2
+        )
+        self._line = self._display.scene().addLine(
+            src_x, src_y, dst_x, dst_y, QtGui.QPen(QtGui.QColor(self._color), 3)
+        )
+    
+    def remove_line(self):
+        if self._line is None:
+            print(f"Line already removed {self._event.data['dst']} <-- {self._event.data['src']}")  # TODO: remove this
+            return
+        src_node, dst_node = (
+            self._display.displayed_nodes[self._event.data['src']],
+            self._display.displayed_nodes[self._event.data['dst']]
+        )
+        src_node.update_conn_counter(-1)
+        dst_node.update_conn_counter(-1)
+
+        self._display.scene().removeItem(self._line)
+        self._line = None
+   
+
+
 class RightMenu(QtWidgets.QWidget):
     def __init__(self, display: CentralDisplay, parent: t.Optional[QtWidgets.QWidget] = None) -> None:
         QtWidgets.QWidget.__init__(self, parent)
         self._main_layout = QtWidgets.QVBoxLayout(self)
         self._events_scroll = QtWidgets.QScrollArea(self, widgetResizable=True)
-        self._events_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        self._events_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        # self._events_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        # self._events_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self._events_wgt = QtWidgets.QWidget(self)
         self._events_layout = QtWidgets.QVBoxLayout(self._events_wgt)
         self._events_layout.addStretch(1)
@@ -240,13 +398,26 @@ class RightMenu(QtWidgets.QWidget):
         self._main_layout.addWidget(self._events_scroll)
         self.setLayout(self._main_layout)
 
+        self._last_shown_event: DisplayedEvent = None
         self._display = display
 
-        # {src: {dst: {id: t.SetDisplayedMsgSend}}}
-        self._pending_msgs: t.Dict[str, t.Dict[str, t.Dict[str, t.List[DisplayedMsgSend]]]] = {}
+        # {src: {dst: {_id: message_event_class}}}
+        self._pending_msgs: t.Dict[
+            str, t.Dict[
+                str, t.Dict[
+                    str, 
+                    t.List[DisplayedMsgSend]
+                ]
+            ]
+        ] = {}
 
     
     def next_event(self, event: Event):
+        if self._last_shown_event is not None:
+            # events that are in moment are shown for one step
+            self._last_shown_event.hide_event()  # TODO: declare this method in base class?
+            self._last_shown_event = None
+
         if event.type == EventType.MESSAGE_SEND:
             key = hashlib.sha256(
                 json.dumps(event.data['msg']).encode()
@@ -266,9 +437,30 @@ class RightMenu(QtWidgets.QWidget):
             self._events_layout.addWidget(
                 DisplayedMsgRcv(event, self._display, self._events_wgt), alignment=QtCore.Qt.AlignTop
             )
-            self._pending_msgs[event.data['src']][event.data['dst']][key].pop().remove_line()
+            corresp_msg_send_event = self._pending_msgs[event.data['src']][event.data['dst']][key].pop()
+            corresp_msg_send_event.is_received = True
+            corresp_msg_send_event.remove_line()
+
+        elif event.type == EventType.LOCAL_MESSAGE_SEND:
+            self._last_shown_event = DisplayedMsgLocal(event, self._display, self._events_wgt)
+            self._events_layout.addWidget(
+                self._last_shown_event, alignment=QtCore.Qt.AlignTop
+            )
+            self._last_shown_event.show_event()
+            
+        elif event.type == EventType.LOCAL_MESSAGE_RECEIVE:
+            self._last_shown_event = DisplayedMsgLocal(event, self._display, self._events_wgt)
+            self._events_layout.addWidget(
+                self._last_shown_event, alignment=QtCore.Qt.AlignTop
+            )
+            self._last_shown_event.show_event()
+
+        elif event.type == EventType.MESSAGE_DROPPED:
+            pass
+
         elif event.type == EventType.NODE_CRASHED:
             self._display.displayed_nodes[event.data['node']].show_cross()
+        
         elif event.type == EventType.NODE_RECOVERED:
             self._display.displayed_nodes[event.data['node']].hide_cross()
         
@@ -288,10 +480,13 @@ class RightMenu(QtWidgets.QWidget):
             return
     
     def clear_events(self):
+        self._last_shown_event = None
         self._pending_msgs.clear()
         layout = self._events_layout
         for i in reversed(range(layout.count())):
             item = layout.itemAt(i).widget()
             if item:
+                if isinstance(item, (DisplayedMsgSend)):  # TODO: add method 'clear' for all events
+                    item.remove_line()
                 item.deleteLater()
 

@@ -10,6 +10,7 @@ from button_set import ButtonSet
 from messagebox import MessageBox
 from static.const import NEXT_STEP_DELAY
 from logparser import LogParser
+from startuppage import StartupPage
 
 # TODO: enable running from file? (for docker users)
 # Add error dialog?
@@ -34,6 +35,7 @@ class VDebugger:  # remove class?
         screen_size = app.primaryScreen().size()
         main_window.resize(screen_size.width() // 2, screen_size.height() // 2)
         main_window.showMaximized()
+        
         main_window.setFixedSize(main_window.size())
         # main_window.show()
         print(f'Debugger exited with status: {app.exec_()}')
@@ -45,7 +47,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._session_data = session_data
         self._curr_test_debug_data: t.Optional[TestDebugData] = None
 
-        self._menu_bar = self.menuBar()        
+        self._menu_bar = self.menuBar()
+        self._menu_bar.addAction('Main', self.show_main_page).setShortcut("Ctrl+T")
+
         self._tests_menus: t.Dict[str, QtWidgets.QMenu] = {
             'main': self._menu_bar.addMenu("Tests"),
             Test.Status.PASSED: None,
@@ -54,7 +58,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._show_test_error_act = self._menu_bar.addAction('Show test error', self.show_test_error)
         self._show_test_error_act.setVisible(False)
         self._menu_bar.addAction('Quit', self.close).setShortcut("Ctrl+W")
-        
 
         # add submenus by status
         for status in [Test.Status.PASSED, Test.Status.FAILED]:
@@ -73,9 +76,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # central widget
         self._central_widget = QtWidgets.QWidget(self)
         self.setCentralWidget(self._central_widget)
-        
-        self._central_layout = QtWidgets.QHBoxLayout(self._central_widget)
+
+        self._central_layout = QtWidgets.QStackedLayout(self._central_widget)
+
+        self._startup_page = StartupPage(self._session_data, self._tests_menu_callbacks, self)
+        self._central_layout.addWidget(self._startup_page)
+
+        # main widget in central layout
         self._horizontal_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
+        # splits node display and button_set with msg box
         self._vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical, self)
 
         self._message_box = MessageBox(self)
@@ -125,6 +134,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # connect buttons
         self._button_set.next_button.clicked.connect(self.next_step)
         self._button_set.prev_button.clicked.connect(self.prev_step)
+        self._button_set.rerun_button.clicked.connect(self.rerun)
         self._button_set.run_button.clicked.connect(self.run)
         self._button_set.stop_button.clicked.connect(self.stop)
         
@@ -145,7 +155,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # self._horizontal_splitter.setStretchFactor(1, 4)
         self._horizontal_splitter.setSizes([60000, 40000])  # hack to set ratio
         self._central_layout.addWidget(self._horizontal_splitter)
-        
+
         self._central_widget.setLayout(self._central_layout)
         self._central_widget.showMaximized()
         self.on_startup()
@@ -158,27 +168,39 @@ class MainWindow(QtWidgets.QMainWindow):
         #     self._tests_menus[test.status].actions()[0].trigger()
         # TODO: ONE TEST RUN IS BUGGING
     
-    def on_select_test_wrapper(self, test_name: int):
+    def on_select_test_wrapper(self, test_name: str):
         def on_select_test():
             test = self._session_data.tests[test_name]
-            self._curr_test_debug_data = TestDebugData(test)
-            self.setWindowTitle(f"VDebugger | TEST: {test.name} | {test.status}")
-
+            self.show_test_page()
             if test.err is not None:
                 self._show_test_error_act.setVisible(True)
                 # TODO: doesn't work...
                 # self.show_test_error()
             else:
                 self._show_test_error_act.setVisible(False)
+            if self._curr_test_debug_data and self._curr_test_debug_data.test.name == test_name:
+                # to start from where we were
+                return
+
+            self._curr_test_debug_data = TestDebugData(test)
+            self.setWindowTitle(f"VDebugger | TEST: {test.name} | {test.status}")
 
             self._message_box.clear()
 
             self._right_menu.clear_events()
 
-            self._display.showMaximized()
+            # self._display.showMaximized()
             self._display.on_startup()
         return on_select_test
     
+    def rerun(self):
+        if self._timer.isActive():
+            self.stop()
+        self._curr_test_debug_data.event_idx = 0
+        self._right_menu.clear_events()
+        # self._display.on_startup()
+        self.run()
+
     def run(self):
         if not self.is_test_selected():
             self._message_box.warning('Test is not selected!')
@@ -193,7 +215,7 @@ class MainWindow(QtWidgets.QMainWindow):
         curr_idx = self._curr_test_debug_data.event_idx
         if curr_idx >= len(self._curr_test_debug_data.test.events):
             # RESTART
-            self.on_select_test_wrapper(self._curr_test_debug_data.test.name)()
+            self.rerun()
         
         self.next_step()
         self._timer.start(NEXT_STEP_DELAY)
@@ -240,6 +262,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self._message_box.warning('Test is not selected!')
             return
         self._message_box.error(self._curr_test_debug_data.test.err, custom_level='TEST ERROR')
+    
+    def show_main_page(self):
+        self._central_layout.setCurrentIndex(0)
+        self._show_test_error_act.setVisible(False)
+    
+    def show_test_page(self):
+        self._central_layout.setCurrentIndex(1)
     
     def keyPressEvent(self, event):
         if event.key() in [QtCore.Qt.Key_Space, QtCore.Qt.Key_S]:

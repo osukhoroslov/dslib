@@ -151,7 +151,6 @@ impl DebugEvent {
                                     "type": "{}",
                                     "data": {}
                                 }},
-                                "src": "local",
                                 "dst": "{}",
                                 "ts": {}
                             }}
@@ -173,7 +172,6 @@ impl DebugEvent {
                                     "type": "{}",
                                     "data": {}
                                 }},
-                                "src": "local",
                                 "dst": "{}",
                                 "ts": {}
                             }}

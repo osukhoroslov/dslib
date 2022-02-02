@@ -1,5 +1,5 @@
 import typing as t
-from PySide2 import QtCore, QtWidgets, QtGui
+from PySide2 import QtWidgets
 
 # TODO: test this class
 class JsonViewer(QtWidgets.QTreeWidget):

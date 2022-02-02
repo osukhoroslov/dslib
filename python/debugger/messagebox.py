@@ -1,7 +1,7 @@
 import typing as t
 import datetime
 
-from PySide2 import QtCore, QtWidgets, QtGui
+from PySide2 import QtCore, QtWidgets
 
 from static.const import MsgBoxColors
 

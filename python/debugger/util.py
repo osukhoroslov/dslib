@@ -2,7 +2,7 @@ import json
 import typing as t
 from dataclasses import dataclass
 from static.const import EventType
-from PySide2 import QtCore, QtWidgets, QtGui
+from PySide2 import QtWidgets
 
 
 @dataclass
@@ -42,7 +42,7 @@ class Test:
 
     name: int
     events: t.List[Event]
-    status: str = None
+    status: Status = None
     err: t.Optional[str] = None
 
     def to_json(self, indent=None):
