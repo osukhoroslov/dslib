@@ -60,6 +60,25 @@ class Context(object):
         return self._time
 
 
+class State:
+    def __init__(self, data: Dict[str, Any]):
+        self._data = data
+
+    @property
+    def data(self) -> Dict[str, Any]:
+        return self._data
+
+    def __getitem__(self, key: str) -> Any:
+        return self._data[key]
+
+    def __setitem__(self, key: str, value: Any):
+        self._data[key] = value
+
+    @staticmethod
+    def from_json(json_str: str) -> State:
+        return State(json.loads(json_str))
+
+
 class Node:
     @abc.abstractmethod
     def on_local_message(self, msg: Message, ctx: Context):
@@ -71,4 +90,18 @@ class Node:
 
     @abc.abstractmethod
     def on_timer(self, timer_id: str, ctx: Context):
+        pass
+
+    def get_json_state(self) -> str:
+        return json.dumps(self.get_state().data)
+
+    @abc.abstractmethod
+    def get_state(self) -> State:
+        pass
+
+    def set_json_state(self, json_str: str):
+        self.set_state(State.from_json(json_str))
+
+    @abc.abstractmethod
+    def set_state(self, state: State):
         pass

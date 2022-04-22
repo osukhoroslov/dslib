@@ -1,15 +1,16 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
+use std::any::Any;
 use decorum::R64;
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 
 
-#[derive(Debug)]
-pub struct EventEntry<E: Debug> {
+#[derive(Debug, Clone)]
+pub struct EventEntry<E: Debug + Clone> {
     id: u64,
     time: R64,
     src: ActorId,
@@ -17,22 +18,22 @@ pub struct EventEntry<E: Debug> {
     event: E,
 }
 
-impl<E: Debug> Eq for EventEntry<E> {}
+impl<E: Debug + Clone> Eq for EventEntry<E> {}
 
-impl<E: Debug> PartialEq for EventEntry<E> {
+impl<E: Debug + Clone> PartialEq for EventEntry<E> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<E: Debug> Ord for EventEntry<E> {
+impl<E: Debug + Clone> Ord for EventEntry<E> {
     fn cmp(&self, other: &Self) -> Ordering {
         other.time.cmp(&self.time)
             .then_with(|| other.id.cmp(&self.id))
     }
 }
 
-impl<E: Debug> PartialOrd for EventEntry<E> {
+impl<E: Debug + Clone> PartialOrd for EventEntry<E> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -64,8 +65,9 @@ impl ActorId {
 }
 
 pub trait Actor<E: Debug> {
-    fn on(&mut self, event: E, ctx: &mut ActorContext<E>);
+    fn on(&mut self, event: E, ctx: &mut ActorContext<E>, is_model_checking: bool);
     fn is_active(&self) -> bool;
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub struct CtxEvent<E> {
@@ -105,26 +107,28 @@ impl<'a, E: Debug> ActorContext<'a, E> {
     }
 }
 
-pub struct Simulation<E: Debug> {
+pub struct Simulation<E: Debug + Clone> {
     clock: R64,
     actors: HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>,
-    events: BinaryHeap<EventEntry<E>>,
+    events: Vec<EventEntry<E>>,
     canceled_events: HashSet<u64>,
     undelivered_events: Vec<EventEntry<E>>,
     event_count: u64,
     rand: Pcg64,
+    model_checking_trace: Vec<String>,
 }
 
-impl<E: Debug> Simulation<E> {
+impl<E: Debug + Clone> Simulation<E> {
     pub fn new(seed: u64) -> Self {        
         Self { 
             clock: R64::from_inner(0.0),
             actors: HashMap::new(),
-            events: BinaryHeap::new(),
+            events: Vec::new(),
             canceled_events: HashSet::new(),
             undelivered_events: Vec::new(),
             event_count: 0,
             rand: Pcg64::seed_from_u64(seed),
+            model_checking_trace: Vec::new(),
         }
     }
 
@@ -152,7 +156,10 @@ impl<E: Debug> Simulation<E> {
         self.canceled_events.insert(event_id);
     }
 
-    pub fn step(&mut self) -> bool {
+    pub fn step(&mut self, is_model_checking: bool) -> bool {
+        if !is_model_checking {
+            self.events.sort_by(|e1, e2| e2.cmp(e1));
+        }
         if let Some(e) = self.events.pop() {
             if !self.canceled_events.remove(&e.id) {
                 // println!("{} {}->{} {:?}", e.time, e.src, e.dest, e.event);
@@ -169,7 +176,7 @@ impl<E: Debug> Simulation<E> {
                 match actor {
                     Some(actor) => {
                         if actor.borrow().is_active() {
-                            actor.borrow_mut().on(e.event, &mut ctx);
+                            actor.borrow_mut().on(e.event, &mut ctx, is_model_checking);
                             let canceled = ctx.canceled_events.clone();
                             for ctx_e in ctx.events {
                                 self.add_event(ctx_e.event, e.dest.clone(), ctx_e.dest, ctx_e.delay);
@@ -194,7 +201,7 @@ impl<E: Debug> Simulation<E> {
 
     pub fn steps(&mut self, step_count: u32) -> bool {
         for _i in 0..step_count {
-            if !self.step() {
+            if !self.step(false) {
                 return false
             }
         }
@@ -202,17 +209,51 @@ impl<E: Debug> Simulation<E> {
     }
 
     pub fn step_until_no_events(&mut self) {
-        while self.step() {
+        while self.step(false) {
         }
     }
 
     pub fn step_for_duration(&mut self, duration: f64) {
         let end_time = self.time() + duration;
-        while self.step() && self.time() < end_time {
+        while self.step(false) && self.time() < end_time {
         }
+    }
+
+    pub fn model_checking_step(
+        &mut self,
+        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool
+    ) -> bool {
+        let events_number = self.events.len();
+        if events_number == 0 {
+            return check_fn(&self.actors);
+        }
+        for i in 0..events_number {
+            let actors = self.actors.clone();
+            let event = self.events[i].clone();
+            self.events.swap(i, events_number - 1);
+            self.step(true);
+            let next_step_res = self.model_checking_step(check_fn);
+            if !next_step_res {
+                self.model_checking_trace.push(format!("{}\t{}\t{}\t{}", event.id, event.time, event.src, event.dest));
+            }
+            while self.events.len() >= events_number {
+                self.events.pop();
+            }
+            self.events.push(event);
+            self.events.swap(i, events_number - 1);
+            self.actors = actors;
+            if !next_step_res {
+                return false;
+            }
+        }
+        return true;
     }
 
     pub fn read_undelivered_events(&mut self) -> Vec<EventEntry<E>> {
         self.undelivered_events.drain(..).collect()
+    }
+    
+    pub fn read_model_checking_trace(&mut self) -> Vec<String> {
+        self.model_checking_trace.drain(..).collect()
     }
 }

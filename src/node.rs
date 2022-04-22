@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -11,9 +12,11 @@ use crate::util::t;
 
 pub trait Node<M: Message> {
     fn id(&self) -> &String;
-    fn on_message(&mut self, msg: M, from: String, ctx: &mut Context<M>);
-    fn on_local_message(&mut self, msg: M, ctx: &mut Context<M>);
-    fn on_timer(&mut self, timer: String, ctx: &mut Context<M>);
+    fn on_message(&mut self, msg: M, from: String, ctx: &mut Context<M>, is_model_checking: bool);
+    fn on_local_message(&mut self, msg: M, ctx: &mut Context<M>, is_model_checking: bool);
+    fn on_timer(&mut self, timer: String, ctx: &mut Context<M>, is_model_checking: bool);
+    fn get_state(&mut self) -> String;
+    fn set_state(&mut self, json_state: String);
 }
 
 pub struct Context<'a, 'b, 'c, M: Message> {
@@ -48,9 +51,11 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
         self.ctx.time() + self.clock_skew
     }
 
-    pub fn send(&mut self, msg: M, dest: &str) {
+    pub fn send(&mut self, msg: M, dest: &str, is_model_checking: bool) {
         let dest = ActorId::from(dest);
-        t!("{:>9.3} {:>10} --> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), dest.to(), msg);
+        if !is_model_checking {
+            t!("{:>9.3} {:>10} --> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), dest.to(), msg);
+        }
         if self.ctx.id == dest {
             let event = SysEvent::MessageReceive { msg, src: self.ctx.id.clone(), dest: dest.clone() };
             self.ctx.emit(event, dest, 0.0);
@@ -61,8 +66,10 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
         *self.sent_message_count += 1;
     }
 
-    pub fn send_local(&mut self, msg: M) {
-        t!(format!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg).cyan());
+    pub fn send_local(&mut self, msg: M, is_model_checking: bool) {
+        if !is_model_checking {
+            t!(format!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg).cyan());
+        }
         let event = LocalEvent {
             time: self.time(),
             msg: Some(msg.clone()),
@@ -161,21 +168,25 @@ impl<M: Message> NodeActor<M> {
     }
 }
 
-impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
-    fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>) {
+impl<M: 'static +  Message> Actor<SysEvent<M>> for NodeActor<M> {
+    fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>, is_model_checking: bool) {
         match self.status {
             NodeStatus::Healthy => {
                 match event {
                     SysEvent::MessageReceive { msg, src, dest } => {
-                        t!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
+                        if !is_model_checking {
+                            t!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
+                        }
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
                             &mut self.sent_message_count, self.clock_skew);
-                        self.node.borrow_mut().on_message(msg, src.to(), &mut node_ctx);
+                        self.node.borrow_mut().on_message(msg, src.to(), &mut node_ctx, is_model_checking);
                         self.received_message_count += 1;
                     }
                     SysEvent::LocalMessageReceive { msg } => {
-                        t!(format!("{:>9.3} {:>10} <<< {:<10} {:?}", ctx.time(), ctx.id.to(), "local", msg).cyan());
+                        if !is_model_checking {
+                            t!(format!("{:>9.3} {:>10} <<< {:<10} {:?}", ctx.time(), ctx.id.to(), "local", msg).cyan());
+                        }
                         self.local_events.push(LocalEvent {
                             time: ctx.time(),
                             msg: Some(msg.clone()),
@@ -184,15 +195,17 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
                             &mut self.sent_message_count, self.clock_skew);
-                        self.node.borrow_mut().on_local_message(msg, &mut node_ctx);
+                        self.node.borrow_mut().on_local_message(msg, &mut node_ctx, is_model_checking);
                     }
                     SysEvent::TimerFired { name } => {
-                        t!(format!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name).magenta());
+                        if !is_model_checking {
+                            t!(format!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name).magenta());
+                        }
                         self.timers.remove(&(ctx.id.clone(), name.clone()));
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
                             &mut self.sent_message_count, self.clock_skew);
-                        self.node.borrow_mut().on_timer(name, &mut node_ctx);
+                        self.node.borrow_mut().on_timer(name, &mut node_ctx, is_model_checking);
                     }
                     _ => ()
                 }
@@ -203,5 +216,9 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
 
     fn is_active(&self) -> bool {
         matches!(self.status, NodeStatus::Healthy)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

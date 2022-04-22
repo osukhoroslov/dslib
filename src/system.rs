@@ -231,7 +231,7 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn step(&mut self) -> bool {
-        self.sim.step()
+        self.sim.step(false)
     }
 
     pub fn steps(&mut self, step_count: u32) -> bool {
@@ -280,5 +280,21 @@ impl<M: Message + 'static> System<M> {
 
     pub fn count_undelivered_events(&mut self) -> usize {
         self.sim.read_undelivered_events().len()
+    }
+
+    pub fn start_model_checking(
+        &mut self,
+        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool
+    ) -> bool {
+        if !self.sim.model_checking_step(check_fn) {
+            println!("Model checking found error with following trace:");
+            println!("ID\tTIME\tSRC\tDEST");
+            let trace = self.sim.read_model_checking_trace();
+            for i in (0..trace.len()).rev() {
+                println!("{}", trace[i]);
+            }
+            return false;
+        }
+        return true;
     }
 }
