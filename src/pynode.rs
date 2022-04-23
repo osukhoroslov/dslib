@@ -9,7 +9,7 @@ use crate::node::{Node, Context};
 use crate::system::Message;
 
 
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct JsonMessage {
     pub tip: String,
     pub data: String,

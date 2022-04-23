@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::env;
 use assertables::{assume, assume_eq};
 use clap::{Arg, App, value_t};
@@ -121,24 +122,24 @@ fn test_duplicated(config: &TestConfig) -> TestResult {
 }
 
 fn check_model(actors: &HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<JsonMessage>>>>>) -> bool {
-    let mut msg_count = HashMap::new();
-    let delivered = actors.get(&ActorId::from("receiver"))
-        .expect("").borrow_mut().as_any().downcast_ref::<NodeActor<JsonMessage>>()
-        .expect("").get_local_events().into_iter()
-        //.filter(|e| matches!(e.tip, LocalEventType::LocalMessageSend))
+    let delivered = actors
+        .get(&ActorId::from("receiver"))
+        .unwrap()
+        .borrow()
+        .as_any()
+        .downcast_ref::<NodeActor<JsonMessage>>()
+        .unwrap()
+        .get_local_events()
+        .into_iter()
+        .filter(|e| matches!(e.tip, LocalEventType::LocalMessageSend))
         .map(|e| e.msg.unwrap())
         .collect::<Vec<_>>();
+    let mut delivered_set = HashSet::new();
     for msg in delivered.iter() {
-        if msg_count.contains_key(&msg.data) {
-            *msg_count.get_mut(&msg.data).unwrap() += 1;
-        } else {
-            msg_count.insert(msg.data.clone(), 1);
-        }
-    }
-    for (_data, count) in msg_count {
-        if count > 1 {
+        if delivered_set.contains(msg) {
             return false;
         }
+        delivered_set.insert(msg);
     }
     true
 }
