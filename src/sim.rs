@@ -158,7 +158,7 @@ impl<E: Debug + Clone> Simulation<E> {
 
     pub fn step(&mut self, is_model_checking: bool) -> bool {
         if !is_model_checking {
-            self.events.sort_by(|e1, e2| e2.cmp(e1));
+            self.events.sort_by(|e1, e2| e1.cmp(e2));
         }
         if let Some(e) = self.events.pop() {
             if !self.canceled_events.remove(&e.id) {
