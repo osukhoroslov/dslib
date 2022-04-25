@@ -65,7 +65,7 @@ impl ActorId {
 }
 
 pub trait Actor<E: Debug> {
-    fn on(&mut self, event: E, ctx: &mut ActorContext<E>, is_model_checking: bool);
+    fn on(&mut self, event: E, ctx: &mut ActorContext<E>);
     fn is_active(&self) -> bool;
     fn as_any(&self) -> &dyn Any;
 }
@@ -176,7 +176,7 @@ impl<E: Debug + Clone> Simulation<E> {
                 match actor {
                     Some(actor) => {
                         if actor.borrow().is_active() {
-                            actor.borrow_mut().on(e.event, &mut ctx, is_model_checking);
+                            actor.borrow_mut().on(e.event, &mut ctx);
                             let canceled = ctx.canceled_events.clone();
                             for ctx_e in ctx.events {
                                 self.add_event(ctx_e.event, e.dest.clone(), ctx_e.dest, ctx_e.delay);

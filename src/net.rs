@@ -127,7 +127,7 @@ impl Network {
 }
 
 impl<M: Message> Actor<SysEvent<M>> for Network {
-    fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>, is_model_checking: bool) {
+    fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>) {
         match event {
             SysEvent::MessageSend { msg, src, dest } => {
                 let msg_size = msg.size();
@@ -151,15 +151,11 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
                             }
                         }
                     } else {
-                        if !is_model_checking {
-                            t!(format!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
+                        t!(format!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
                                  "!!!", src.to(), dest.to(), msg).yellow());
-                        }
                     }
                 } else {
-                    if !is_model_checking {
-                        t!(format!("Discarded message from crashed node {:?}", msg).yellow());
-                    }
+                    t!(format!("Discarded message from crashed node {:?}", msg).yellow());
                 }
                 self.message_count += 1;
                 self.traffic += msg_size;

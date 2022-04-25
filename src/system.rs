@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 use colored::*;
+use log::LevelFilter;
 use rand::prelude::*;
 
 use crate::sim::*;
@@ -286,15 +287,23 @@ impl<M: Message + 'static> System<M> {
         &mut self,
         check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool
     ) -> bool {
-        if !self.sim.model_checking_step(check_fn) {
+        // temporary set log level to INFO to omit trace output
+        let log_level = log::max_level();
+        log::set_max_level(LevelFilter::Info);
+
+        let passed = self.sim.model_checking_step(check_fn);
+        if !passed {
             println!("Model checking found error with following trace:");
             println!("ID\tTIME\tSRC\tDEST");
             let trace = self.sim.read_model_checking_trace();
             for i in (0..trace.len()).rev() {
                 println!("{}", trace[i]);
             }
-            return false;
         }
-        return true;
+
+        // restore log level
+        log::set_max_level(log_level);
+
+        passed
     }
 }

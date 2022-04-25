@@ -98,14 +98,14 @@ pub struct PyNode {
 }
 
 impl PyNode {
-    fn handle_node_actions(ctx: &mut Context<JsonMessage>, py_ctx: &PyObject, py: Python, is_model_checking: bool) {
+    fn handle_node_actions(ctx: &mut Context<JsonMessage>, py_ctx: &PyObject, py: Python) {
         let sent: Vec<(String, String, String)> = py_ctx.getattr(py, "_sent_messages").unwrap().extract(py).unwrap();
         for m in sent {
-            ctx.send(JsonMessage::new(&m.0, &m.1), &m.2, is_model_checking);
+            ctx.send(JsonMessage::new(&m.0, &m.1), &m.2);
         }
         let sent_local: Vec<(String, String)> = py_ctx.getattr(py, "_sent_local_messages").unwrap().extract(py).unwrap();
         for m in sent_local {
-            ctx.send_local(JsonMessage::new(&m.0, &m.1), is_model_checking);
+            ctx.send_local(JsonMessage::new(&m.0, &m.1));
         }
         let timer_actions: Vec<(String, f64)> = py_ctx.getattr(py, "_timer_actions").unwrap().extract(py).unwrap();
         for t in timer_actions {
@@ -123,7 +123,7 @@ impl Node<JsonMessage> for PyNode {
         &self.id
     }
 
-    fn on_message(&mut self, msg: JsonMessage, from: String, ctx: &mut Context<JsonMessage>, is_model_checking: bool) {
+    fn on_message(&mut self, msg: JsonMessage, from: String, ctx: &mut Context<JsonMessage>) {
         Python::with_gil(|py| {
             let py_msg = self.msg_class.call_method1(py, "from_json", (msg.tip, msg.data)).unwrap();
             let py_ctx = self.ctx_class.call1(py, (ctx.time(),)).unwrap();
@@ -131,11 +131,11 @@ impl Node<JsonMessage> for PyNode {
                 .call_method1(py, "on_message", (py_msg, from, &py_ctx))
                 .map_err(|e| log_python_error(e, py))
                 .unwrap();
-            PyNode::handle_node_actions(ctx, &py_ctx, py, is_model_checking);
+            PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
     }
 
-    fn on_local_message(&mut self, msg: JsonMessage, ctx: &mut Context<JsonMessage>, is_model_checking: bool) {
+    fn on_local_message(&mut self, msg: JsonMessage, ctx: &mut Context<JsonMessage>) {
         Python::with_gil(|py| {
             let py_msg = self.msg_class.call_method1(py, "from_json", (msg.tip, msg.data)).unwrap();
             let py_ctx = self.ctx_class.call1(py, (ctx.time(),)).unwrap();
@@ -143,18 +143,18 @@ impl Node<JsonMessage> for PyNode {
                 .call_method1(py, "on_local_message", (py_msg, &py_ctx))
                 .map_err(|e| log_python_error(e, py))
                 .unwrap();
-            PyNode::handle_node_actions(ctx, &py_ctx, py, is_model_checking);
+            PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
     }
 
-    fn on_timer(&mut self, timer: String, ctx: &mut Context<JsonMessage>, is_model_checking: bool) {
+    fn on_timer(&mut self, timer: String, ctx: &mut Context<JsonMessage>) {
         Python::with_gil(|py| {
             let py_ctx = self.ctx_class.call1(py, (ctx.time(),)).unwrap();
             self.node
                 .call_method1(py, "on_timer", (timer, &py_ctx))
                 .map_err(|e| log_python_error(e, py))
                 .unwrap();
-            PyNode::handle_node_actions(ctx, &py_ctx, py, is_model_checking);
+            PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
     }
 
