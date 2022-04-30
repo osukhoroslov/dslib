@@ -133,7 +133,7 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
         match event {
             SysEvent::MessageSend { msg, src, dest } => {
                 let msg_size = msg.size();
-                if !self.crashed_nodes.contains(&src.to()) {
+                if !self.crashed_nodes.contains(&src.to()) {  // TODO: handle && !self.crashed_nodes.contains(&dest.to()) ??
                     if ctx.rand() >= self.drop_rate 
                         && !self.drop_outgoing.contains(&src.to())
                         && !self.drop_incoming.contains(&dest.to())
