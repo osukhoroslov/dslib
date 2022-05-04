@@ -110,6 +110,35 @@ enum NodeStatus {
     Crashed,
 }
 
+pub struct NodeActorState<M: Message> {
+    pub node_state: String,
+    timers: HashMap<(ActorId, String), u64>,
+    local_events: Vec<LocalEvent<M>>,
+    local_mailbox: Vec<M>,
+    sent_message_count: u64,
+    received_message_count: u64,
+}
+
+impl<M: Message> NodeActorState<M> {
+    pub fn new(
+        node_state: String,
+        timers: HashMap<(ActorId, String), u64>,
+        local_events: Vec<LocalEvent<M>>,
+        local_mailbox: Vec<M>,
+        sent_message_count: u64,
+        received_message_count: u64,
+    ) -> Self {
+        Self {
+            node_state,
+            timers,
+            local_events,
+            local_mailbox,
+            sent_message_count,
+            received_message_count,
+        }
+    }
+}
+
 pub struct NodeActor<M: Message> {
     node: Rc<RefCell<dyn Node<M>>>,
     timers: HashMap<(ActorId, String), u64>,
@@ -210,5 +239,27 @@ impl<M: 'static +  Message> Actor<SysEvent<M>> for NodeActor<M> {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn get_state(&self) -> Rc<RefCell<dyn Any>> {
+        return Rc::new(RefCell::new(NodeActorState::new(
+            self.node.as_ref().borrow_mut().get_state(),
+            self.timers.clone(),
+            self.local_events.clone(),
+            self.local_mailbox.clone(),
+            self.sent_message_count,
+            self.received_message_count,
+        )))
+    }
+
+    fn set_state(&mut self, state_rc: Rc<RefCell<dyn Any>>) {
+        let state_any = state_rc.borrow();
+        let state = state_any.downcast_ref::<NodeActorState<M>>().unwrap();
+        self.node.borrow_mut().set_state(state.node_state.clone());
+        self.timers = state.timers.clone();
+        self.local_events = state.local_events.clone();
+        self.local_mailbox = state.local_mailbox.clone();
+        self.sent_message_count = state.sent_message_count;
+        self.received_message_count = state.received_message_count;
     }
 }

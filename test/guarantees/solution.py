@@ -1,4 +1,4 @@
-from dslib import Context, Message, Node
+from dslib import Context, Message, Node, State
 
 
 class Sender(Node):
@@ -28,6 +28,12 @@ class Sender(Node):
         # process fired timers here
         pass
 
+    def get_state(self) -> State:
+        return State({})
+
+    def set_state(self, state: State):
+        pass
+
 
 class Receiver(Node):
     def __init__(self, node_id: str):
@@ -47,3 +53,9 @@ class Receiver(Node):
     def on_timer(self, timer_id: str, ctx: Context):
         # process fired timers here
         pass
+
+    def get_state(self) -> State:
+        return State({'last_message': self._last_message})
+
+    def set_state(self, state: State):
+        self._last_message = state['last_message']
