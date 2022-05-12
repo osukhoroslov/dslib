@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
 use std::any::Any;
+use std::time::{Duration, SystemTime};
 use decorum::R64;
 use rand::prelude::*;
 use rand_pcg::Pcg64;
@@ -223,13 +224,18 @@ impl<E: Debug + Clone> Simulation<E> {
 
     pub fn model_checking_step(
         &mut self,
-        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool
+        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
+        sys_time: &SystemTime,
+        limit_seconds: u64,
     ) -> bool {
         let events_number = self.events.len();
         if events_number == 0 {
             return check_fn(&self.actors);
         }
         for i in 0..events_number {
+            if sys_time.elapsed().unwrap() >= Duration::from_secs(limit_seconds) {
+                return true;
+            }
             let mut actors_states: HashMap<ActorId, Rc<RefCell<dyn Any>>> = HashMap::new();
             for actor in &self.actors {
                 actors_states.insert(actor.0.clone(), actor.1.borrow().get_state());
@@ -237,7 +243,7 @@ impl<E: Debug + Clone> Simulation<E> {
             let event = self.events[i].clone();
             self.events.swap(i, events_number - 1);
             self.step(true);
-            let next_step_res = self.model_checking_step(check_fn);
+            let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds);
             if !next_step_res {
                 self.model_checking_trace.push(format!("{}\t{}\t{}\t{}", event.id, event.time, event.src, event.dest));
             }

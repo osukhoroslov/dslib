@@ -148,7 +148,7 @@ fn model_checking_example(config: &TestConfig) -> TestResult {
     let mut sys = build_system(config);
     sys.set_dupl_rate(1.);
     send_info_messages(&mut sys, config.info_type);
-    if sys.start_model_checking(check_model) {
+    if sys.start_model_checking(check_model, 10) {
         Ok(true)
     } else {
         Err("model checking found error".to_string())

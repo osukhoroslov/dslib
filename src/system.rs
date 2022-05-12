@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::time::SystemTime;
 use colored::*;
 use log::LevelFilter;
 use rand::prelude::*;
@@ -285,13 +286,16 @@ impl<M: Message + 'static> System<M> {
 
     pub fn start_model_checking(
         &mut self,
-        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool
+        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool,
+        limit_seconds: u64,
     ) -> bool {
+        let sys_time = SystemTime::now();
+
         // temporary set log level to INFO to omit trace output
         let log_level = log::max_level();
         log::set_max_level(LevelFilter::Info);
 
-        let passed = self.sim.model_checking_step(check_fn);
+        let passed = self.sim.model_checking_step(check_fn, &sys_time, limit_seconds);
         if !passed {
             println!("Model checking found error with following trace:");
             println!("ID\tTIME\tSRC\tDEST");
