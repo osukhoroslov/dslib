@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
 use std::any::Any;
@@ -113,7 +113,7 @@ impl<'a, E: Debug> ActorContext<'a, E> {
 pub struct Simulation<E: Debug + Clone> {
     clock: R64,
     actors: HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>,
-    events: Vec<EventEntry<E>>,
+    events: BinaryHeap<EventEntry<E>>,
     canceled_events: HashSet<u64>,
     undelivered_events: Vec<EventEntry<E>>,
     event_count: u64,
@@ -126,7 +126,7 @@ impl<E: Debug + Clone> Simulation<E> {
         Self { 
             clock: R64::from_inner(0.0),
             actors: HashMap::new(),
-            events: Vec::new(),
+            events: BinaryHeap::new(),
             canceled_events: HashSet::new(),
             undelivered_events: Vec::new(),
             event_count: 0,
@@ -143,14 +143,26 @@ impl<E: Debug + Clone> Simulation<E> {
         self.actors.insert(ActorId(id.to_string()), actor);
     }
 
-    pub fn add_event(&mut self, event: E, src: ActorId, dest: ActorId, delay: f64) -> u64 {
+    pub fn add_event(
+        &mut self,
+        event: E,
+        src: ActorId,
+        dest: ActorId,
+        delay: f64,
+        is_model_checking: bool,
+        events_vec: &mut Vec<EventEntry<E>>,
+    ) -> u64 {
         let entry = EventEntry {
             id: self.event_count,
             time: self.clock + delay,
             src, dest, event
         };
         let id = entry.id;
-        self.events.push(entry);
+        if is_model_checking {
+            events_vec.push(entry);
+        } else {
+            self.events.push(entry);
+        }
         self.event_count += 1;
         id
     }
@@ -159,11 +171,12 @@ impl<E: Debug + Clone> Simulation<E> {
         self.canceled_events.insert(event_id);
     }
 
-    pub fn step(&mut self, is_model_checking: bool) -> bool {
-        if !is_model_checking {
-            self.events.sort_by(|e1, e2| e1.cmp(e2));
-        }
-        if let Some(e) = self.events.pop() {
+    pub fn step(&mut self, is_model_checking: bool, events_vec: &mut Vec<EventEntry<E>>) -> bool {
+        if let Some(e) = if is_model_checking {
+            events_vec.pop()
+        } else {
+            self.events.pop()
+        } {
             if !self.canceled_events.remove(&e.id) {
                 // println!("{} {}->{} {:?}", e.time, e.src, e.dest, e.event);
                 self.clock = e.time;
@@ -182,7 +195,14 @@ impl<E: Debug + Clone> Simulation<E> {
                             actor.borrow_mut().on(e.event, &mut ctx);
                             let canceled = ctx.canceled_events.clone();
                             for ctx_e in ctx.events {
-                                self.add_event(ctx_e.event, e.dest.clone(), ctx_e.dest, ctx_e.delay);
+                                self.add_event(
+                                    ctx_e.event,
+                                    e.dest.clone(),
+                                    ctx_e.dest,
+                                    ctx_e.delay,
+                                    is_model_checking,
+                                    events_vec,
+                                );
                             };
                             for event_id in canceled {
                                 self.cancel_event(event_id);
@@ -204,7 +224,7 @@ impl<E: Debug + Clone> Simulation<E> {
 
     pub fn steps(&mut self, step_count: u32) -> bool {
         for _i in 0..step_count {
-            if !self.step(false) {
+            if !self.step(false, &mut Vec::new()) {
                 return false
             }
         }
@@ -212,13 +232,13 @@ impl<E: Debug + Clone> Simulation<E> {
     }
 
     pub fn step_until_no_events(&mut self) {
-        while self.step(false) {
+        while self.step(false, &mut Vec::new()) {
         }
     }
 
     pub fn step_for_duration(&mut self, duration: f64) {
         let end_time = self.time() + duration;
-        while self.step(false) && self.time() < end_time {
+        while self.step(false, &mut Vec::new()) && self.time() < end_time {
         }
     }
 
@@ -227,8 +247,9 @@ impl<E: Debug + Clone> Simulation<E> {
         check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
         sys_time: &SystemTime,
         limit_seconds: u64,
+        events: &mut Vec<EventEntry<E>>,
     ) -> bool {
-        let events_number = self.events.len();
+        let events_number = events.len();
         if events_number == 0 {
             return check_fn(&self.actors);
         }
@@ -240,18 +261,18 @@ impl<E: Debug + Clone> Simulation<E> {
             for actor in &self.actors {
                 actors_states.insert(actor.0.clone(), actor.1.borrow().get_state());
             }
-            let event = self.events[i].clone();
-            self.events.swap(i, events_number - 1);
-            self.step(true);
-            let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds);
+            let event = events[i].clone();
+            events.swap(i, events_number - 1);
+            self.step(true, events);
+            let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds, events);
             if !next_step_res {
                 self.model_checking_trace.push(format!("{}\t{}\t{}\t{}", event.id, event.time, event.src, event.dest));
             }
-            while self.events.len() >= events_number {
-                self.events.pop();
+            while events.len() >= events_number {
+                events.pop();
             }
-            self.events.push(event);
-            self.events.swap(i, events_number - 1);
+            events.push(event);
+            events.swap(i, events_number - 1);
             for actor_state in actors_states {
                 self.actors[&actor_state.0].borrow_mut().set_state(actor_state.1);
             }
@@ -260,6 +281,16 @@ impl<E: Debug + Clone> Simulation<E> {
             }
         }
         return true;
+    }
+
+    pub fn run_model_checking(
+        &mut self,
+        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
+        sys_time: &SystemTime,
+        limit_seconds: u64,
+    ) -> bool {
+        let mut events = self.events.clone().into_vec();
+        return self.model_checking_step(check_fn, sys_time, limit_seconds, &mut events);
     }
 
     pub fn read_undelivered_events(&mut self) -> Vec<EventEntry<E>> {

@@ -218,14 +218,28 @@ impl<M: Message + 'static> System<M> {
             src: ActorId::from(src),
             dest: ActorId::from(dest),
         };
-        self.sim.add_event(event, ActorId::from(src), ActorId::from("net"), 0.0);
+        self.sim.add_event(
+            event,
+            ActorId::from(src),
+            ActorId::from("net"),
+            0.0,
+            false,
+            &mut Vec::new(),
+        );
     }
 
     pub fn send_local(&mut self, msg: M, dest: &str) {
         let src = ActorId::from(&format!("local@{}", dest));
         let dest = ActorId::from(dest);
         let event = SysEvent::LocalMessageReceive { msg };
-        self.sim.add_event(event, src, dest, 0.0);
+        self.sim.add_event(
+            event,
+            src,
+            dest,
+            0.0,
+            false,
+            &mut Vec::new(),
+        );
     }
 
     pub fn time(&self) -> f64 {
@@ -233,7 +247,7 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn step(&mut self) -> bool {
-        self.sim.step(false)
+        self.sim.step(false, &mut Vec::new())
     }
 
     pub fn steps(&mut self, step_count: u32) -> bool {
@@ -295,7 +309,7 @@ impl<M: Message + 'static> System<M> {
         let log_level = log::max_level();
         log::set_max_level(LevelFilter::Info);
 
-        let passed = self.sim.model_checking_step(check_fn, &sys_time, limit_seconds);
+        let passed = self.sim.run_model_checking(check_fn, &sys_time, limit_seconds);
         if !passed {
             println!("Model checking found error with following trace:");
             println!("ID\tTIME\tSRC\tDEST");
