@@ -312,7 +312,7 @@ impl<M: Message + 'static> System<M> {
         let passed = self.sim.run_model_checking(check_fn, &sys_time, limit_seconds);
         if !passed {
             println!("Model checking found error with following trace:");
-            println!("ID\tTIME\tSRC\tDEST");
+            println!("{:>9} {:>15}     {:<15} {:^25} {:<10}", "TIME", "SRC", "DEST", "TYPE", "TEXT");
             let trace = self.sim.read_model_checking_trace();
             for i in (0..trace.len()).rev() {
                 println!("{}", trace[i]);

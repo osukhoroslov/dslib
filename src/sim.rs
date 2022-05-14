@@ -8,6 +8,8 @@ use std::time::{Duration, SystemTime};
 use decorum::R64;
 use rand::prelude::*;
 use rand_pcg::Pcg64;
+use crate::pynode::JsonMessage;
+use crate::system::SysEvent;
 
 
 #[derive(Debug, Clone)]
@@ -121,7 +123,7 @@ pub struct Simulation<E: Debug + Clone> {
     model_checking_trace: Vec<String>,
 }
 
-impl<E: Debug + Clone> Simulation<E> {
+impl<E: 'static +  Debug + Clone> Simulation<E> {
     pub fn new(seed: u64) -> Self {        
         Self { 
             clock: R64::from_inner(0.0),
@@ -268,7 +270,38 @@ impl<E: Debug + Clone> Simulation<E> {
             self.step(true, events);
             let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds, events);
             if !next_step_res {
-                self.model_checking_trace.push(format!("{}\t{}\t{}\t{}", event.id, event.time, event.src, event.dest));
+                let event_e = event.event.clone();
+                let event_any = &event_e as &dyn Any;
+                let (event_type, event_text1, event_text2) = if let Some(sys_event) = event_any.downcast_ref::<SysEvent<JsonMessage>>() {
+                    match sys_event {
+                        SysEvent::MessageSend { msg, src: _, dest: _ } => {
+                            ("message_send", &((*msg).tip[..]), &((*msg).data[..]))
+                        }
+                        SysEvent::MessageReceive { msg, src: _, dest: _ } => {
+                            ("message_send", &((*msg).tip[..]), &((*msg).data[..]))
+                        }
+                        SysEvent::LocalMessageReceive { msg } => {
+                            ("local_message_receive", &((*msg).tip[..]), &((*msg).data[..]))
+                        }
+                        SysEvent::TimerSet { name, delay: _ } => {
+                            ("timer_set", &(name[..]), "")
+                        }
+                        SysEvent::TimerFired { name } => {
+                            ("timer_fired", &(name[..]), "")
+                        }
+                    }
+                } else {
+                    ("", "", "")
+                };
+                self.model_checking_trace.push(format!(
+                    "{:>9.3} {:>15} --> {:<15} {:^25} {:<10} {:?}",
+                    event.time,
+                    event.src.to_string(),
+                    event.dest.to_string(),
+                    event_type,
+                    event_text1,
+                    event_text2,
+                ));
             }
             while events.len() >= events_number {
                 events.pop();
