@@ -261,6 +261,7 @@ impl<E: Debug + Clone> Simulation<E> {
             for actor in &self.actors {
                 actors_states.insert(actor.0.clone(), actor.1.borrow().get_state());
             }
+            let event_count = self.event_count;
             let event = events[i].clone();
             events.swap(i, events_number - 1);
             self.step(true, events);
@@ -273,6 +274,7 @@ impl<E: Debug + Clone> Simulation<E> {
             }
             events.push(event);
             events.swap(i, events_number - 1);
+            self.event_count = event_count;
             for actor_state in actors_states {
                 self.actors[&actor_state.0].borrow_mut().set_state(actor_state.1);
             }
