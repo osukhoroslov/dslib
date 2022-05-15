@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::env;
 use assertables::{assume, assume_eq};
 use clap::{Arg, App, value_t};
@@ -59,16 +58,12 @@ fn build_system(config: &TestConfig) -> System<JsonMessage> {
     return sys;
 }
 
-fn check_guarantees(sys: &mut System<JsonMessage>, sent: &[JsonMessage],
+fn check(delivered: &Vec<JsonMessage>, sent: &[JsonMessage],
                     config: &TestConfig) -> TestResult {
     let mut msg_count = HashMap::new();
     for msg in sent {
         msg_count.insert(msg.data.clone(), 0);
     }
-    let delivered = sys.get_local_events("receiver").into_iter()
-        .filter(|e| matches!(e.tip, LocalEventType::LocalMessageSend))
-        .map(|e| e.msg.unwrap())
-        .collect::<Vec<_>>();
     // check that delivered messages have expected type and data
     for msg in delivered.iter() {
         // assuming all messages have the same type
@@ -100,6 +95,40 @@ fn check_guarantees(sys: &mut System<JsonMessage>, sent: &[JsonMessage],
     Ok(true)
 }
 
+fn check_standard(sys: &mut System<JsonMessage>, sent: &[JsonMessage],
+                  config: &TestConfig) -> TestResult {
+    let delivered = sys.get_local_events("receiver").into_iter()
+        .filter(|e| matches!(e.tip, LocalEventType::LocalMessageSend))
+        .map(|e| e.msg.unwrap())
+        .collect::<Vec<_>>();
+    return check(&delivered, sent, config);
+}
+
+fn check_model(
+    sent: &[JsonMessage],
+    test_result: &mut TestResult,
+    config: &TestConfig,
+    actors: &HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<JsonMessage>>>>>
+) -> bool {
+    let delivered = actors
+        .get(&ActorId::from("receiver"))
+        .unwrap()
+        .borrow()
+        .as_any()
+        .downcast_ref::<NodeActor<JsonMessage>>()
+        .unwrap()
+        .get_local_events()
+        .into_iter()
+        .filter(|e| matches!(e.tip, LocalEventType::LocalMessageSend))
+        .map(|e| e.msg.unwrap())
+        .collect::<Vec<_>>();
+    *test_result = check(&delivered, sent, config);
+    match test_result {
+        Ok(_) => true,
+        Err(_) => false,
+    }
+}
+
 fn send_info_messages(sys: &mut System<JsonMessage>, info_type: &str) -> Vec<JsonMessage> {
     let infos = ["distributed", "systems", "need", "some", "guarantees"];
     let mut messages = Vec::new();
@@ -113,45 +142,78 @@ fn send_info_messages(sys: &mut System<JsonMessage>, info_type: &str) -> Vec<Jso
 
 // TESTS -------------------------------------------------------------------------------------------
 
-fn test_duplicated(config: &TestConfig) -> TestResult {
+fn test_normal(config: &TestConfig, model_checking: bool) -> TestResult {
+    let mut sys = build_system(config);
+    let messages = send_info_messages(&mut sys, config.info_type);
+    if model_checking {
+        let mut test_result = Ok(true);
+        sys.start_model_checking(
+            &mut |actors| -> bool {
+                check_model(&messages, &mut test_result, config, actors)
+            },
+            10,
+        );
+        test_result
+    } else {
+        sys.step_until_no_events();
+        check_standard(&mut sys, &messages, config)
+    }
+}
+
+fn test_delayed(config: &TestConfig, model_checking: bool) -> TestResult {
+    let mut sys = build_system(config);
+    sys.set_delays(1., 5.);
+    let messages = send_info_messages(&mut sys, config.info_type);
+    if model_checking {
+        let mut test_result = Ok(true);
+        sys.start_model_checking(
+            &mut |actors| -> bool {
+                check_model(&messages, &mut test_result, config, actors)
+            },
+            10,
+        );
+        test_result
+    } else {
+        sys.step_until_no_events();
+        check_standard(&mut sys, &messages, config)
+    }
+}
+
+fn test_duplicated(config: &TestConfig, model_checking: bool) -> TestResult {
     let mut sys = build_system(config);
     sys.set_dupl_rate(1.);
     let messages = send_info_messages(&mut sys, config.info_type);
-    sys.step_until_no_events();
-    check_guarantees(&mut sys, &messages, config)
-}
-
-fn check_model(actors: &HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<JsonMessage>>>>>) -> bool {
-    let delivered = actors
-        .get(&ActorId::from("receiver"))
-        .unwrap()
-        .borrow()
-        .as_any()
-        .downcast_ref::<NodeActor<JsonMessage>>()
-        .unwrap()
-        .get_local_events()
-        .into_iter()
-        .filter(|e| matches!(e.tip, LocalEventType::LocalMessageSend))
-        .map(|e| e.msg.unwrap())
-        .collect::<Vec<_>>();
-    let mut delivered_set = HashSet::new();
-    for msg in delivered.iter() {
-        if delivered_set.contains(msg) {
-            return false;
-        }
-        delivered_set.insert(msg);
-    }
-    true
-}
-
-fn model_checking_example(config: &TestConfig) -> TestResult {
-    let mut sys = build_system(config);
-    sys.set_dupl_rate(1.);
-    send_info_messages(&mut sys, config.info_type);
-    if sys.start_model_checking(check_model, 10) {
-        Ok(true)
+    if model_checking {
+        let mut test_result = Ok(true);
+        sys.start_model_checking(
+            &mut |actors| -> bool {
+                check_model(&messages, &mut test_result, config, actors)
+            },
+            10,
+        );
+        test_result
     } else {
-        Err("model checking found error".to_string())
+        sys.step_until_no_events();
+        check_standard(&mut sys, &messages, config)
+    }
+}
+
+fn test_dropped(config: &TestConfig, model_checking: bool) -> TestResult {
+    let mut sys = build_system(config);
+    sys.set_drop_rate(0.5);
+    let messages = send_info_messages(&mut sys, config.info_type);
+    if model_checking {
+        let mut test_result = Ok(true);
+        sys.start_model_checking(
+            &mut |actors| -> bool {
+                check_model(&messages, &mut test_result, config, actors)
+            },
+            10,
+        );
+        test_result
+    } else {
+        sys.step_until_no_events();
+        check_standard(&mut sys, &messages, config)
     }
 }
 
@@ -200,11 +262,68 @@ fn main() {
     // At most once
     config.info_type = "INFO-1";
     config.once = true;
+
     // without drops should be reliable
     config.reliable = true;
-    tests.add("INFO-1 DUPLICATED", test_duplicated, config);
+    tests.add("INFO-1 NORMAL STANDARD", test_normal, config, false);
+    tests.add("INFO-1 NORMAL MODEL CHECKING", test_normal, config, true);
 
-    tests.add("INFO-1 DUPLICATED MODEL CHECKING", model_checking_example, config);
+    tests.add("INFO-1 DELAYED STANDARD", test_delayed, config, false);
+    tests.add("INFO-1 DELAYED MODEL CHECKING", test_delayed, config, true);
+
+    tests.add("INFO-1 DUPLICATED STANDARD", test_duplicated, config, false);
+    tests.add("INFO-1 DUPLICATED MODEL CHECKING", test_duplicated, config, true);
+
+    // with drops is not reliable
+    config.reliable = false;
+    tests.add("INFO-1 DROPPED STANDARD", test_dropped, config, false);
+    tests.add("INFO-1 DROPPED MODEL CHECKING", test_dropped, config, true);
+
+    // At least once
+    config.info_type = "INFO-2";
+    config.reliable = true;
+    config.once = false;
+    tests.add("INFO-2 NORMAL STANDARD", test_normal, config, false);
+    tests.add("INFO-2 NORMAL MODEL CHECKING", test_normal, config, true);
+
+    tests.add("INFO-2 DELAYED STANDARD", test_delayed, config, false);
+    tests.add("INFO-2 DELAYED MODEL CHECKING", test_delayed, config, true);
+
+    tests.add("INFO-2 DUPLICATED STANDARD", test_duplicated, config, false);
+    tests.add("INFO-2 DUPLICATED MODEL CHECKING", test_duplicated, config, true);
+
+    tests.add("INFO-2 DROPPED STANDARD", test_dropped, config, false);
+    tests.add("INFO-2 DROPPED MODEL CHECKING", test_dropped, config, true);
+
+    // Exactly once
+    config.info_type = "INFO-3";
+    config.once = true;
+    tests.add("INFO-3 NORMAL STANDARD", test_normal, config, false);
+    tests.add("INFO-3 NORMAL MODEL CHECKING", test_normal, config, true);
+
+    tests.add("INFO-3 DELAYED STANDARD", test_delayed, config, false);
+    tests.add("INFO-3 DELAYED MODEL CHECKING", test_delayed, config, true);
+
+    tests.add("INFO-3 DUPLICATED STANDARD", test_duplicated, config, false);
+    tests.add("INFO-3 DUPLICATED MODEL CHECKING", test_duplicated, config, true);
+
+    tests.add("INFO-3 DROPPED STANDARD", test_dropped, config, false);
+    tests.add("INFO-3 DROPPED MODEL CHECKING", test_dropped, config, true);
+
+    // Exactly once + ordered
+    config.info_type = "INFO-4";
+    config.ordered = true;
+    tests.add("INFO-4 NORMAL STANDARD", test_normal, config, false);
+    tests.add("INFO-4 NORMAL MODEL CHECKING", test_normal, config, true);
+
+    tests.add("INFO-4 DELAYED STANDARD", test_delayed, config, false);
+    tests.add("INFO-4 DELAYED MODEL CHECKING", test_delayed, config, true);
+
+    tests.add("INFO-4 DUPLICATED STANDARD", test_duplicated, config, false);
+    tests.add("INFO-4 DUPLICATED MODEL CHECKING", test_duplicated, config, true);
+
+    tests.add("INFO-4 DROPPED STANDARD", test_dropped, config, false);
+    tests.add("INFO-4 DROPPED MODEL CHECKING", test_dropped, config, true);
 
     tests.run();
 }

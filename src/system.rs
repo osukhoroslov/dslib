@@ -300,7 +300,7 @@ impl<M: Message + 'static> System<M> {
 
     pub fn start_model_checking(
         &mut self,
-        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool,
+        check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool,
         limit_seconds: u64,
     ) -> bool {
         let sys_time = SystemTime::now();

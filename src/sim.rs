@@ -246,7 +246,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
 
     pub fn model_checking_step(
         &mut self,
-        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
+        check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
         sys_time: &SystemTime,
         limit_seconds: u64,
         events: &mut Vec<EventEntry<E>>,
@@ -322,7 +322,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
 
     pub fn run_model_checking(
         &mut self,
-        check_fn: fn(&HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
+        check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
         sys_time: &SystemTime,
         limit_seconds: u64,
     ) -> bool {
