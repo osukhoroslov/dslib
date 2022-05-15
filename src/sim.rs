@@ -265,8 +265,8 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             }
             let event_count = self.event_count;
             let rand = self.rand.clone();
-            let event = events[i].clone();
-            events.swap(i, events_number - 1);
+            let event = events.remove(i);
+            events.push(event.clone());
             self.step(true, events);
             let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds, events);
             if !next_step_res {
@@ -306,8 +306,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             while events.len() >= events_number {
                 events.pop();
             }
-            events.push(event);
-            events.swap(i, events_number - 1);
+            events.insert(i, event);
             self.event_count = event_count;
             self.rand = rand;
             for actor_state in actors_states {
