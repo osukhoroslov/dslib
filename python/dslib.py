@@ -22,9 +22,16 @@ class Message:
     def remove(self, key: str):
         self._data.pop(key, None)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {'type': self._type, 'data': self._data}
+
     @staticmethod
     def from_json(message_type: str, json_str: str) -> Message:
         return Message(message_type, json.loads(json_str))
+
+    @staticmethod
+    def from_dict(message_dict: Dict[str, Any]):
+        return Message(message_dict['type'], message_dict['data'])
 
 
 class Context(object):
