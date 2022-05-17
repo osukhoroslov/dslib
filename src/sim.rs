@@ -264,6 +264,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
                 actors_states.insert(actor.0.clone(), actor.1.borrow().get_state());
             }
             let event_count = self.event_count;
+            let canceled_events = self.canceled_events.clone();
             let rand = self.rand.clone();
             let event = events.remove(i);
             events.push(event.clone());
@@ -307,6 +308,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
                 events.pop();
             }
             events.insert(i, event);
+            self.canceled_events = canceled_events;
             self.event_count = event_count;
             self.rand = rand;
             for actor_state in actors_states {
