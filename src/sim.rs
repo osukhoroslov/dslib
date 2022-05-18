@@ -279,7 +279,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
                             ("message_send", &((*msg).tip[..]), &((*msg).data[..]))
                         }
                         SysEvent::MessageReceive { msg, src: _, dest: _ } => {
-                            ("message_send", &((*msg).tip[..]), &((*msg).data[..]))
+                            ("message_receive", &((*msg).tip[..]), &((*msg).data[..]))
                         }
                         SysEvent::LocalMessageReceive { msg } => {
                             ("local_message_receive", &((*msg).tip[..]), &((*msg).data[..]))
