@@ -305,7 +305,7 @@ impl<M: Message + 'static> System<M> {
     ) -> bool {
         let sys_time = SystemTime::now();
 
-        // temporary set log level to INFO to omit trace output
+        // temporarily set log level to INFO to omit trace output
         let log_level = log::max_level();
         log::set_max_level(LevelFilter::Info);
 
@@ -314,7 +314,7 @@ impl<M: Message + 'static> System<M> {
             println!("Model checking found error with following trace:");
             println!("{:>9} {:>15}     {:<15} {:^25} {:<10}", "TIME", "SRC", "DEST", "TYPE", "TEXT");
             let trace = self.sim.read_model_checking_trace();
-            for i in (0..trace.len()).rev() {
+            for i in 0..trace.len() {
                 println!("{}", trace[i]);
             }
         }

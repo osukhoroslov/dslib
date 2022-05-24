@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime};
 use decorum::R64;
 use rand::prelude::*;
 use rand_pcg::Pcg64;
+
 use crate::pynode::JsonMessage;
 use crate::system::SysEvent;
 
@@ -251,17 +252,17 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
         limit_seconds: u64,
         events: &mut Vec<EventEntry<E>>,
     ) -> bool {
-        let events_number = events.len();
-        if events_number == 0 {
+        let mc_events_count = events.len();
+        if mc_events_count == 0 {
             return check_fn(&self.actors);
         }
-        for i in 0..events_number {
+        for i in 0..mc_events_count {
             if sys_time.elapsed().unwrap() >= Duration::from_secs(limit_seconds) {
                 return true;
             }
             let mut actors_states: HashMap<ActorId, Rc<RefCell<dyn Any>>> = HashMap::new();
-            for actor in &self.actors {
-                actors_states.insert(actor.0.clone(), actor.1.borrow().get_state());
+            for (actor_id, actor) in &self.actors {
+                actors_states.insert(actor_id.clone(), actor.borrow().get_state());
             }
             let event_count = self.event_count;
             let canceled_events = self.canceled_events.clone();
@@ -304,15 +305,15 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
                     event_text2,
                 ));
             }
-            while events.len() >= events_number {
+            while events.len() >= mc_events_count {
                 events.pop();
             }
             events.insert(i, event);
             self.canceled_events = canceled_events;
             self.event_count = event_count;
             self.rand = rand;
-            for actor_state in actors_states {
-                self.actors[&actor_state.0].borrow_mut().set_state(actor_state.1);
+            for (actor_id, actor_state) in actors_states {
+                self.actors[&actor_id].borrow_mut().set_state(actor_state);
             }
             if !next_step_res {
                 return false;
@@ -336,6 +337,6 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
     }
     
     pub fn read_model_checking_trace(&mut self) -> Vec<String> {
-        self.model_checking_trace.drain(..).collect()
+        self.model_checking_trace.drain(..).rev().collect()
     }
 }

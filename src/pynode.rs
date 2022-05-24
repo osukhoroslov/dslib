@@ -159,14 +159,12 @@ impl Node<JsonMessage> for PyNode {
     }
 
     fn get_state(&mut self) -> String {
-        let mut result: String = String::from("");
-        Python::with_gil(|py| {
-            result = self.node
+        return Python::with_gil(|py| -> String {
+            self.node
                 .call_method1(py, "get_json_state", ())
                 .map_err(|e| log_python_error(e, py))
-                .unwrap().to_string();
-        });
-        return result;
+                .unwrap().to_string()
+        })
     }
 
     fn set_state(&mut self, json_state: String) {

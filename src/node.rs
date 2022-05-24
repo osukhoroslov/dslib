@@ -111,7 +111,7 @@ enum NodeStatus {
 }
 
 pub struct NodeActorState<M: Message> {
-    pub node_state: String,
+    node_state: String,
     timers: HashMap<(ActorId, String), u64>,
     local_events: Vec<LocalEvent<M>>,
     local_mailbox: Vec<M>,
@@ -243,7 +243,7 @@ impl<M: 'static +  Message> Actor<SysEvent<M>> for NodeActor<M> {
 
     fn get_state(&self) -> Rc<RefCell<dyn Any>> {
         return Rc::new(RefCell::new(NodeActorState::new(
-            self.node.as_ref().borrow_mut().get_state(),
+            self.node.borrow_mut().get_state(),
             self.timers.clone(),
             self.local_events.clone(),
             self.local_mailbox.clone(),
