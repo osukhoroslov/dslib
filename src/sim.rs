@@ -72,8 +72,8 @@ pub trait Actor<E: Debug> {
     fn on(&mut self, event: E, ctx: &mut ActorContext<E>);
     fn is_active(&self) -> bool;
     fn as_any(&self) -> &dyn Any;
-    fn get_state(&self) -> Rc<RefCell<dyn Any>>;
-    fn set_state(&mut self, state: Rc<RefCell<dyn Any>>);
+    fn get_state(&self) -> Box<dyn Any>;
+    fn set_state(&mut self, state: Box<dyn Any>);
 }
 
 pub struct CtxEvent<E> {
@@ -260,7 +260,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             if sys_time.elapsed().unwrap() >= Duration::from_secs(limit_seconds) {
                 return true;
             }
-            let mut actors_states: HashMap<ActorId, Rc<RefCell<dyn Any>>> = HashMap::new();
+            let mut actors_states: HashMap<ActorId, Box<dyn Any>> = HashMap::new();
             for (actor_id, actor) in &self.actors {
                 actors_states.insert(actor_id.clone(), actor.borrow().get_state());
             }

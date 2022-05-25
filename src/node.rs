@@ -241,20 +241,19 @@ impl<M: 'static +  Message> Actor<SysEvent<M>> for NodeActor<M> {
         self
     }
 
-    fn get_state(&self) -> Rc<RefCell<dyn Any>> {
-        return Rc::new(RefCell::new(NodeActorState::new(
+    fn get_state(&self) -> Box<dyn Any> {
+        return Box::new(NodeActorState::new(
             self.node.borrow_mut().get_state(),
             self.timers.clone(),
             self.local_events.clone(),
             self.local_mailbox.clone(),
             self.sent_message_count,
             self.received_message_count,
-        )))
+        ))
     }
 
-    fn set_state(&mut self, state_rc: Rc<RefCell<dyn Any>>) {
-        let state_any = state_rc.borrow();
-        let state = state_any.downcast_ref::<NodeActorState<M>>().unwrap();
+    fn set_state(&mut self, state_box: Box<dyn Any>) {
+        let state = state_box.downcast_ref::<NodeActorState<M>>().unwrap();
         self.node.borrow_mut().set_state(state.node_state.clone());
         self.timers = state.timers.clone();
         self.local_events = state.local_events.clone();

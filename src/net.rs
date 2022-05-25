@@ -1,7 +1,5 @@
 use std::any::Any;
-use std::cell::RefCell;
 use std::collections::HashSet;
-use std::rc::Rc;
 use colored::*;
 
 use crate::sim::{Actor, ActorContext};
@@ -174,9 +172,9 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
         self
     }
 
-    fn get_state(&self) -> Rc<RefCell<dyn Any>> {
-        return Rc::new(RefCell::new(""));
+    fn get_state(&self) -> Box<dyn Any> {
+        return Box::new("");
     }
 
-    fn set_state(&mut self, _state: Rc<RefCell<dyn Any>>) {}
+    fn set_state(&mut self, _state: Box<dyn Any>) {}
 }
