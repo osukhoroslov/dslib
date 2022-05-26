@@ -152,8 +152,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
         src: ActorId,
         dest: ActorId,
         delay: f64,
-        is_model_checking: bool,
-        events_vec: &mut Vec<EventEntry<E>>,
+        mc_events: Option<&mut Vec<EventEntry<E>>>,
     ) -> u64 {
         let entry = EventEntry {
             id: self.event_count,
@@ -161,10 +160,9 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             src, dest, event
         };
         let id = entry.id;
-        if is_model_checking {
-            events_vec.push(entry);
-        } else {
-            self.events.push(entry);
+        match mc_events {
+            None => self.events.push(entry),
+            Some(events_vec) => events_vec.push(entry),
         }
         self.event_count += 1;
         id
@@ -174,8 +172,8 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
         self.canceled_events.insert(event_id);
     }
 
-    pub fn step(&mut self, is_model_checking: bool, events_vec: &mut Vec<EventEntry<E>>) -> bool {
-        if let Some(e) = if is_model_checking {
+    pub fn step(&mut self, mut mc_events: Option<&mut Vec<EventEntry<E>>>) -> bool {
+        if let Some(e) = if let Some(events_vec) = mc_events.as_mut().map(|x| &mut **x) {
             events_vec.pop()
         } else {
             self.events.pop()
@@ -203,8 +201,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
                                     e.dest.clone(),
                                     ctx_e.dest,
                                     ctx_e.delay,
-                                    is_model_checking,
-                                    events_vec,
+                                    mc_events.as_mut().map(|x| &mut **x),
                                 );
                             };
                             for event_id in canceled {
@@ -227,7 +224,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
 
     pub fn steps(&mut self, step_count: u32) -> bool {
         for _i in 0..step_count {
-            if !self.step(false, &mut Vec::new()) {
+            if !self.step(None) {
                 return false
             }
         }
@@ -235,13 +232,13 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
     }
 
     pub fn step_until_no_events(&mut self) {
-        while self.step(false, &mut Vec::new()) {
+        while self.step(None) {
         }
     }
 
     pub fn step_for_duration(&mut self, duration: f64) {
         let end_time = self.time() + duration;
-        while self.step(false, &mut Vec::new()) && self.time() < end_time {
+        while self.step(None) && self.time() < end_time {
         }
     }
 
@@ -269,7 +266,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             let rand = self.rand.clone();
             let event = events.remove(i);
             events.push(event.clone());
-            self.step(true, events);
+            self.step(Some(events));
             let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds, events);
             if !next_step_res {
                 let event_e = event.event.clone();

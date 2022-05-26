@@ -223,8 +223,7 @@ impl<M: Message + 'static> System<M> {
             ActorId::from(src),
             ActorId::from("net"),
             0.0,
-            false,
-            &mut Vec::new(),
+            None,
         );
     }
 
@@ -232,14 +231,7 @@ impl<M: Message + 'static> System<M> {
         let src = ActorId::from(&format!("local@{}", dest));
         let dest = ActorId::from(dest);
         let event = SysEvent::LocalMessageReceive { msg };
-        self.sim.add_event(
-            event,
-            src,
-            dest,
-            0.0,
-            false,
-            &mut Vec::new(),
-        );
+        self.sim.add_event(event, src, dest, 0.0, None);
     }
 
     pub fn time(&self) -> f64 {
@@ -247,7 +239,7 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn step(&mut self) -> bool {
-        self.sim.step(false, &mut Vec::new())
+        self.sim.step(None)
     }
 
     pub fn steps(&mut self, step_count: u32) -> bool {
