@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::time::SystemTime;
+use std::time::Instant;
 use colored::*;
 use log::LevelFilter;
 use rand::prelude::*;
@@ -295,7 +295,7 @@ impl<M: Message + 'static> System<M> {
         check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool,
         limit_seconds: u64,
     ) -> bool {
-        let sys_time = SystemTime::now();
+        let sys_time = Instant::now();
 
         // temporarily set log level to INFO to omit trace output
         let log_level = log::max_level();
