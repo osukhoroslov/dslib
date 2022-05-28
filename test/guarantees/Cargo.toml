@@ -1,0 +1,14 @@
+[package]
+name = "guarantees"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+dslib = { path = "../.." }
+log = "0.4.0"
+env_logger = "0.8.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+assertables = "3.2.2"
+clap = "2.33.3"
+sugars = "3.0.0"

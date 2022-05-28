@@ -2,7 +2,9 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 use colored::*;
+use log::LevelFilter;
 use rand::prelude::*;
 
 use crate::sim::*;
@@ -216,14 +218,20 @@ impl<M: Message + 'static> System<M> {
             src: ActorId::from(src),
             dest: ActorId::from(dest),
         };
-        self.sim.add_event(event, ActorId::from(src), ActorId::from("net"), 0.0);
+        self.sim.add_event(
+            event,
+            ActorId::from(src),
+            ActorId::from("net"),
+            0.0,
+            None,
+        );
     }
 
     pub fn send_local(&mut self, msg: M, dest: &str) {
         let src = ActorId::from(&format!("local@{}", dest));
         let dest = ActorId::from(dest);
         let event = SysEvent::LocalMessageReceive { msg };
-        self.sim.add_event(event, src, dest, 0.0);
+        self.sim.add_event(event, src, dest, 0.0, None);
     }
 
     pub fn time(&self) -> f64 {
@@ -231,7 +239,7 @@ impl<M: Message + 'static> System<M> {
     }
 
     pub fn step(&mut self) -> bool {
-        self.sim.step()
+        self.sim.step(None)
     }
 
     pub fn steps(&mut self, step_count: u32) -> bool {
@@ -280,5 +288,33 @@ impl<M: Message + 'static> System<M> {
 
     pub fn count_undelivered_events(&mut self) -> usize {
         self.sim.read_undelivered_events().len()
+    }
+
+    pub fn start_model_checking(
+        &mut self,
+        check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<SysEvent<M>>>>>) -> bool,
+        limit_seconds: u64,
+    ) -> bool {
+        let sys_time = Instant::now();
+        let limit = Duration::from_secs(limit_seconds);
+
+        // temporarily set log level to INFO to omit trace output
+        let log_level = log::max_level();
+        log::set_max_level(LevelFilter::Info);
+
+        let passed = self.sim.run_model_checking(check_fn, &sys_time, &limit);
+        if !passed {
+            println!("Model checking found error with following trace:");
+            println!("{:>9} {:>15}     {:<15} {:^25} {:<10}", "TIME", "SRC", "DEST", "TYPE", "TEXT");
+            let trace = self.sim.read_model_checking_trace();
+            for i in 0..trace.len() {
+                println!("{}", trace[i]);
+            }
+        }
+
+        // restore log level
+        log::set_max_level(log_level);
+
+        passed
     }
 }

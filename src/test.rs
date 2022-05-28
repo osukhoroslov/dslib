@@ -2,8 +2,9 @@ pub type TestResult = Result<bool, String>;
 
 pub struct Test<T> {
     name: String,
-    func: fn(&T) -> TestResult,
-    config: T
+    func: fn(&T, bool) -> TestResult,
+    config: T,
+    model_checking: bool,
 }
 
 pub struct TestSuite<T> {
@@ -15,8 +16,8 @@ impl<T> TestSuite<T> {
         Self { tests: Vec::new() }
     }
 
-    pub fn add(&mut self, name: &str, f: fn(&T) -> TestResult, config: T) {
-        self.tests.push(Test {name: name.to_string(), func: f, config});
+    pub fn add(&mut self, name: &str, f: fn(&T, bool) -> TestResult, config: T, model_checking: bool) {
+        self.tests.push(Test {name: name.to_string(), func: f, config, model_checking});
     }
 
     pub fn run(&mut self) {
@@ -24,7 +25,7 @@ impl<T> TestSuite<T> {
         let mut failed_tests = Vec::new();
         for test in &self.tests {
             println!("\n--- {} ---\n", test.name);
-            match (test.func)(&test.config) {
+            match (test.func)(&test.config, test.model_checking) {
                 Ok(_) => {
                     println!("\nPASSED\n");
                     passed_count += 1;
@@ -53,7 +54,7 @@ impl<T> TestSuite<T> {
         for test in &self.tests {
             if test.name == name {
                 println!("\n--- {} ---\n", test.name);
-                match (test.func)(&test.config) {
+                match (test.func)(&test.config, test.model_checking) {
                     Ok(_) => println!("\nPASSED\n"),
                     Err(e) => println!("\nFAILED: {}\n", e)
                 }

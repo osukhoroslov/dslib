@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -14,6 +15,8 @@ pub trait Node<M: Message> {
     fn on_message(&mut self, msg: M, from: String, ctx: &mut Context<M>);
     fn on_local_message(&mut self, msg: M, ctx: &mut Context<M>);
     fn on_timer(&mut self, timer: String, ctx: &mut Context<M>);
+    fn get_state(&mut self) -> String;
+    fn set_state(&mut self, json_state: String);
 }
 
 pub struct Context<'a, 'b, 'c, M: Message> {
@@ -107,6 +110,35 @@ enum NodeStatus {
     Crashed,
 }
 
+pub struct NodeActorState<M: Message> {
+    node_state: String,
+    timers: HashMap<(ActorId, String), u64>,
+    local_events: Vec<LocalEvent<M>>,
+    local_mailbox: Vec<M>,
+    sent_message_count: u64,
+    received_message_count: u64,
+}
+
+impl<M: Message> NodeActorState<M> {
+    pub fn new(
+        node_state: String,
+        timers: HashMap<(ActorId, String), u64>,
+        local_events: Vec<LocalEvent<M>>,
+        local_mailbox: Vec<M>,
+        sent_message_count: u64,
+        received_message_count: u64,
+    ) -> Self {
+        Self {
+            node_state,
+            timers,
+            local_events,
+            local_mailbox,
+            sent_message_count,
+            received_message_count,
+        }
+    }
+}
+
 pub struct NodeActor<M: Message> {
     node: Rc<RefCell<dyn Node<M>>>,
     timers: HashMap<(ActorId, String), u64>,
@@ -161,7 +193,7 @@ impl<M: Message> NodeActor<M> {
     }
 }
 
-impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
+impl<M: 'static +  Message> Actor<SysEvent<M>> for NodeActor<M> {
     fn on(&mut self, event: SysEvent<M>, ctx: &mut ActorContext<SysEvent<M>>) {
         match self.status {
             NodeStatus::Healthy => {
@@ -203,5 +235,30 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
 
     fn is_active(&self) -> bool {
         matches!(self.status, NodeStatus::Healthy)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn get_state(&self) -> Box<dyn Any> {
+        return Box::new(NodeActorState::new(
+            self.node.borrow_mut().get_state(),
+            self.timers.clone(),
+            self.local_events.clone(),
+            self.local_mailbox.clone(),
+            self.sent_message_count,
+            self.received_message_count,
+        ))
+    }
+
+    fn set_state(&mut self, state_box: Box<dyn Any>) {
+        let state = state_box.downcast_ref::<NodeActorState<M>>().unwrap();
+        self.node.borrow_mut().set_state(state.node_state.clone());
+        self.timers = state.timers.clone();
+        self.local_events = state.local_events.clone();
+        self.local_mailbox = state.local_mailbox.clone();
+        self.sent_message_count = state.sent_message_count;
+        self.received_message_count = state.received_message_count;
     }
 }
