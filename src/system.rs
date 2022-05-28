@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use colored::*;
 use log::LevelFilter;
 use rand::prelude::*;
@@ -296,12 +296,13 @@ impl<M: Message + 'static> System<M> {
         limit_seconds: u64,
     ) -> bool {
         let sys_time = Instant::now();
+        let limit = Duration::from_secs(limit_seconds);
 
         // temporarily set log level to INFO to omit trace output
         let log_level = log::max_level();
         log::set_max_level(LevelFilter::Info);
 
-        let passed = self.sim.run_model_checking(check_fn, &sys_time, limit_seconds);
+        let passed = self.sim.run_model_checking(check_fn, &sys_time, &limit);
         if !passed {
             println!("Model checking found error with following trace:");
             println!("{:>9} {:>15}     {:<15} {:^25} {:<10}", "TIME", "SRC", "DEST", "TYPE", "TEXT");

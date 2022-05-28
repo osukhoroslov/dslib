@@ -246,7 +246,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
         &mut self,
         check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
         sys_time: &Instant,
-        limit_seconds: u64,
+        limit: &Duration,
         events: &mut Vec<EventEntry<E>>,
     ) -> bool {
         let mc_events_count = events.len();
@@ -254,7 +254,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             return check_fn(&self.actors);
         }
         for i in 0..mc_events_count {
-            if sys_time.elapsed() >= Duration::from_secs(limit_seconds) {
+            if sys_time.elapsed() >= *limit {
                 return true;
             }
             let mut actors_states: HashMap<ActorId, Box<dyn Any>> = HashMap::new();
@@ -267,7 +267,7 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
             let event = events.remove(i);
             events.push(event.clone());
             self.step(Some(events));
-            let next_step_res = self.model_checking_step(check_fn, sys_time, limit_seconds, events);
+            let next_step_res = self.model_checking_step(check_fn, sys_time, limit, events);
             if !next_step_res {
                 let event_e = event.event.clone();
                 let event_any = &event_e as &dyn Any;
@@ -323,10 +323,10 @@ impl<E: 'static +  Debug + Clone> Simulation<E> {
         &mut self,
         check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
         sys_time: &Instant,
-        limit_seconds: u64,
+        limit: &Duration,
     ) -> bool {
         let mut events = self.events.clone().into_vec();
-        return self.model_checking_step(check_fn, sys_time, limit_seconds, &mut events);
+        return self.model_checking_step(check_fn, sys_time, limit, &mut events);
     }
 
     pub fn read_undelivered_events(&mut self) -> Vec<EventEntry<E>> {
