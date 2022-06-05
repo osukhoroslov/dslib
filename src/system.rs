@@ -104,6 +104,11 @@ impl<M: Message + 'static> System<M> {
         self.node_ids.clone()
     }
 
+    pub fn set_clock_skew(&mut self, node_id: &str, clock_skew: f64) {
+        let mut node = self.nodes.get(node_id).unwrap().borrow_mut();
+        node.set_clock_skew(clock_skew);
+    }
+
     pub fn crash_node(&mut self, node_id: &str) {
         debugger::add_event(DebugEvent::NodeCrashed{
             node: String::from(node_id),
