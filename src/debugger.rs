@@ -1,12 +1,9 @@
 use std::fs;
-use pyo3::prelude::*;
-use pyo3::types::{PyModule};
 use std::io::prelude::*;
 
-use crate::pynode::{JsonMessage, log_python_error};
+use crate::pynode::{JsonMessage};
 
 static LOG_FILE_PATH: &str = "events.log";
-static PY_CODE_PATH: &str = "/python/debugger/debugger.py";
 
 #[derive(Debug, Clone)]
 pub enum DebugEvent {
@@ -47,6 +44,7 @@ pub enum DebugEvent {
     TimerSet {
         name: String,
         delay: f64,
+        node: String,
         ts: f64
     },
     TimerFired {
@@ -86,7 +84,7 @@ pub enum DebugEvent {
         ts: f64
     },
     NetworkPartition {
-        group1: String,  // TODO: change style? (now like: ["1", "2"])
+        group1: String,
         group2: String,
         ts: f64
     }
@@ -229,7 +227,7 @@ impl DebugEvent {
                     ts
                 ).replace("\n", "").replace("  ", "")
             },
-            DebugEvent::TimerSet { name, delay, ts } => {
+            DebugEvent::TimerSet { name, delay, node, ts } => {
                 format!(
                     r#"
                         {{
@@ -237,12 +235,14 @@ impl DebugEvent {
                             "data": {{
                                 "name": "{}",
                                 "delay": {},
+                                "node": {},
                                 "ts": {}
                             }}
                         }}
                     "#,
                     name,
                     delay,
+                    node,
                     ts
                 ).replace("\n", "").replace("  ", "")
             },
@@ -397,7 +397,14 @@ pub fn init_debugger() {
     fs::File::create(LOG_FILE_PATH).unwrap();
 }
 
+pub fn log_file_exists() -> bool {
+    fs::metadata(LOG_FILE_PATH).is_ok()
+}
+
 pub fn add_node_ids(node_ids: &Vec<String>) {
+    if !log_file_exists() {
+        return
+    }
     let mut f = fs::OpenOptions::new()
         .write(true)
         .append(true)
@@ -413,6 +420,9 @@ pub fn add_node_ids(node_ids: &Vec<String>) {
 }
 
 pub fn add_event(e: DebugEvent) {
+    if !log_file_exists() {
+        return
+    }
     let mut f = fs::OpenOptions::new()
         .write(true)
         .append(true)
@@ -424,6 +434,9 @@ pub fn add_event(e: DebugEvent) {
 }
 
 pub fn set_test(test_name: &String) {
+    if !log_file_exists() {
+        return
+    }
     let mut f = fs::OpenOptions::new()
         .write(true)
         .append(true)
@@ -433,6 +446,9 @@ pub fn set_test(test_name: &String) {
 }
 
 pub fn set_test_result(test_result: String) {
+    if !log_file_exists() {
+        return
+    }
     let mut f = fs::OpenOptions::new()
         .write(true)
         .append(true)
@@ -441,26 +457,3 @@ pub fn set_test_result(test_result: String) {
     f.write(format!("TEST_END:{}\n", test_result).as_bytes()).unwrap();
 }
 
-pub fn start_visuals(dslib_path: String) {
-    let mut path = dslib_path;
-    path.push_str(PY_CODE_PATH);
-    let code = fs::read_to_string(&path).unwrap();
-    let code_realpath = fs::canonicalize(&path).unwrap();
-    let code_filename = code_realpath.to_str().unwrap();
-    let code_module = code_filename.replace(".py", "");
-    Python::with_gil(|py| {
-        let debugger_module = PyModule::from_code(
-            py, code.as_str(), code_filename, &code_module
-        ).unwrap();
-        let class = debugger_module.getattr("VDebugger").unwrap().to_object(py);
-        let debugger = class.call1(py, {})
-            .map_err(|e| log_python_error(e, py))
-            .unwrap().to_object(py);
-        debugger
-            .call_method1(py, "main", (LOG_FILE_PATH,))
-            .map_err(|e| log_python_error(e, py))
-            .unwrap();
-    });
-    // remove logs
-    // fs::remove_file(LOG_FILE_PATH).unwrap();
-}
