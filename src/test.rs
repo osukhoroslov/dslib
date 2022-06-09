@@ -34,7 +34,7 @@ impl<T> TestSuite<T> {
                     passed_count += 1;
                 }
                 Err(e) => {
-                    debugger::set_test_result(format!("FAILED:{}", e));
+                    debugger::set_test_result(format!("FAILED:{}", e.replace("\n", " ")));
                     println!("\nFAILED: {}\n", e);
                     failed_tests.push((&test.name, e));
                 }
@@ -57,10 +57,17 @@ impl<T> TestSuite<T> {
     pub fn run_test(&mut self, name: &str) {
         for test in &self.tests {
             if test.name == name {
+                debugger::set_test(&test.name);
                 println!("\n--- {} ---\n", test.name);
                 match (test.func)(&test.config) {
-                    Ok(_) => println!("\nPASSED\n"),
-                    Err(e) => println!("\nFAILED: {}\n", e)
+                    Ok(_) => {
+                        debugger::set_test_result(String::from("PASSED:"));
+                        println!("\nPASSED\n")
+                    }
+                    Err(e) => {
+                        debugger::set_test_result(format!("FAILED:{}", e.replace("\n", " ")));
+                        println!("\nFAILED: {}\n", e)
+                    }
                 }
             }
         }

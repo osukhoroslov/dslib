@@ -41,18 +41,11 @@ pub enum DebugEvent {
         dst: String,
         ts: f64
     },
-    TimerSet {
-        name: String,
-        delay: f64,
-        node: String,
-        ts: f64
-    },
     TimerFired {
         name: String,
         node: String,
         ts: f64
     },
-    // TODO: gather node events? (add field "what happened")
     NodeRecovered {
         node: String,
         ts: f64
@@ -84,8 +77,8 @@ pub enum DebugEvent {
         ts: f64
     },
     NetworkPartition {
-        group1: String,
-        group2: String,
+        group1: Vec<String>,
+        group2: Vec<String>,
         ts: f64
     }
 }
@@ -227,32 +220,13 @@ impl DebugEvent {
                     ts
                 ).replace("\n", "").replace("  ", "")
             },
-            DebugEvent::TimerSet { name, delay, node, ts } => {
-                format!(
-                    r#"
-                        {{
-                            "type": "TimerSet",
-                            "data": {{
-                                "name": "{}",
-                                "delay": {},
-                                "node": {},
-                                "ts": {}
-                            }}
-                        }}
-                    "#,
-                    name,
-                    delay,
-                    node,
-                    ts
-                ).replace("\n", "").replace("  ", "")
-            },
             DebugEvent::TimerFired { name, node, ts } => {
                 format!(
                     r#"
                         {{
                             "type": "TimerFired",
                             "data": {{
-                                "name": {},
+                                "name": "{}",
                                 "node": "{}",
                                 "ts": {}
                             }}
@@ -378,8 +352,8 @@ impl DebugEvent {
                         {{
                             "type": "NetworkPartition",
                             "data": {{
-                                "group1": "{:?}",
-                                "group2": "{:?}",
+                                "group1": {:?},
+                                "group2": {:?},
                                 "ts": {}
                             }}
                         }}

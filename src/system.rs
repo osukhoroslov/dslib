@@ -222,8 +222,8 @@ impl<M: Message + 'static> System<M> {
 
     pub fn make_partition(&mut self, group1: &[&str], group2: &[&str]) {
         debugger::add_event(DebugEvent::NetworkPartition{
-            group1: format!("{:?}", group1),
-            group2: format!("{:?}", group2),
+            group1: group1.iter().map(|&s|s.into()).collect(),
+            group2: group2.iter().map(|&s|s.into()).collect(),
             ts: self.sim.time()
         });
         t!(format!("{:>9.3} NETWORK PARTITION {:?} {:?}", self.sim.time(), group1, group2).red());
