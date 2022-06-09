@@ -45,6 +45,10 @@ impl Message for JsonMessage {
     fn size(&self) -> u64 {
         self.data.len() as u64
     }
+
+    fn to_json(&self) -> JsonMessage {
+        self.clone()
+    }
 }
 
 pub struct PyNodeFactory {
@@ -159,7 +163,7 @@ impl Node<JsonMessage> for PyNode {
     }
 }
 
-fn log_python_error(e: PyErr, py: Python) -> PyErr {
+pub fn log_python_error(e: PyErr, py: Python) -> PyErr {
     eprintln!("\n!!! Error when calling Python code:\n");
     e.print(py);
     eprintln!();
