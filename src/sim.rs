@@ -12,6 +12,7 @@ use rand_pcg::Pcg64;
 pub struct EventEntry<E: Debug> {
     id: u64,
     time: R64,
+    #[allow(dead_code)]
     src: ActorId,
     dest: ActorId,
     event: E,
