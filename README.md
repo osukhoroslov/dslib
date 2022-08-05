@@ -1,3 +1,3 @@
 # dslib
 
-Framework for teaching and testing distributed systems.
+A simulation-based framework for teaching distributed systems.
