@@ -9,7 +9,7 @@ use crate::node::{Node, Context};
 use crate::system::Message;
 
 
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct JsonMessage {
     pub tip: String,
     pub data: String,
@@ -156,6 +156,24 @@ impl Node<JsonMessage> for PyNode {
                 .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
         });
+    }
+
+    fn get_state(&mut self) -> String {
+        return Python::with_gil(|py| -> String {
+            self.node
+                .call_method1(py, "get_json_state", ())
+                .map_err(|e| log_python_error(e, py))
+                .unwrap().to_string()
+        })
+    }
+
+    fn set_state(&mut self, json_state: String) {
+        Python::with_gil(|py| {
+            self.node
+                .call_method1(py, "set_json_state", (json_state,))
+                .map_err(|e| log_python_error(e, py))
+                .unwrap();
+        })
     }
 }
 

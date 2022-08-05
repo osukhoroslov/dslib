@@ -1,4 +1,4 @@
-mod sim;
+pub mod sim;
 pub mod system;
 pub mod net;
 pub mod node;

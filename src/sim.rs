@@ -3,13 +3,18 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
+use std::any::Any;
+use std::time::{Duration, Instant};
 use decorum::R64;
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 
+use crate::pynode::JsonMessage;
+use crate::system::SysEvent;
 
-#[derive(Debug)]
-pub struct EventEntry<E: Debug> {
+
+#[derive(Debug, Clone)]
+pub struct EventEntry<E: Debug + Clone> {
     id: u64,
     time: R64,
     #[allow(dead_code)]
@@ -18,22 +23,22 @@ pub struct EventEntry<E: Debug> {
     event: E,
 }
 
-impl<E: Debug> Eq for EventEntry<E> {}
+impl<E: Debug + Clone> Eq for EventEntry<E> {}
 
-impl<E: Debug> PartialEq for EventEntry<E> {
+impl<E: Debug + Clone> PartialEq for EventEntry<E> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<E: Debug> Ord for EventEntry<E> {
+impl<E: Debug + Clone> Ord for EventEntry<E> {
     fn cmp(&self, other: &Self) -> Ordering {
         other.time.cmp(&self.time)
             .then_with(|| other.id.cmp(&self.id))
     }
 }
 
-impl<E: Debug> PartialOrd for EventEntry<E> {
+impl<E: Debug + Clone> PartialOrd for EventEntry<E> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -67,6 +72,9 @@ impl ActorId {
 pub trait Actor<E: Debug> {
     fn on(&mut self, event: E, ctx: &mut ActorContext<E>);
     fn is_active(&self) -> bool;
+    fn as_any(&self) -> &dyn Any;
+    fn get_state(&self) -> Box<dyn Any>;
+    fn set_state(&mut self, state: Box<dyn Any>);
 }
 
 pub struct CtxEvent<E> {
@@ -106,7 +114,7 @@ impl<'a, E: Debug> ActorContext<'a, E> {
     }
 }
 
-pub struct Simulation<E: Debug> {
+pub struct Simulation<E: Debug + Clone> {
     clock: R64,
     actors: HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>,
     events: BinaryHeap<EventEntry<E>>,
@@ -114,9 +122,10 @@ pub struct Simulation<E: Debug> {
     undelivered_events: Vec<EventEntry<E>>,
     event_count: u64,
     rand: Pcg64,
+    model_checking_trace: Vec<String>,
 }
 
-impl<E: Debug> Simulation<E> {
+impl<E: 'static +  Debug + Clone> Simulation<E> {
     pub fn new(seed: u64) -> Self {        
         Self { 
             clock: R64::from_inner(0.0),
@@ -126,6 +135,7 @@ impl<E: Debug> Simulation<E> {
             undelivered_events: Vec::new(),
             event_count: 0,
             rand: Pcg64::seed_from_u64(seed),
+            model_checking_trace: Vec::new(),
         }
     }
 
@@ -137,14 +147,24 @@ impl<E: Debug> Simulation<E> {
         self.actors.insert(ActorId(id.to_string()), actor);
     }
 
-    pub fn add_event(&mut self, event: E, src: ActorId, dest: ActorId, delay: f64) -> u64 {
+    pub fn add_event(
+        &mut self,
+        event: E,
+        src: ActorId,
+        dest: ActorId,
+        delay: f64,
+        mc_events: Option<&mut Vec<EventEntry<E>>>,
+    ) -> u64 {
         let entry = EventEntry {
             id: self.event_count,
             time: self.clock + delay,
             src, dest, event
         };
         let id = entry.id;
-        self.events.push(entry);
+        match mc_events {
+            None => self.events.push(entry),
+            Some(events_vec) => events_vec.push(entry),
+        }
         self.event_count += 1;
         id
     }
@@ -153,8 +173,12 @@ impl<E: Debug> Simulation<E> {
         self.canceled_events.insert(event_id);
     }
 
-    pub fn step(&mut self) -> bool {
-        if let Some(e) = self.events.pop() {
+    pub fn step(&mut self, mut mc_events: Option<&mut Vec<EventEntry<E>>>) -> bool {
+        if let Some(e) = if let Some(events_vec) = mc_events.as_mut().map(|x| &mut **x) {
+            events_vec.pop()
+        } else {
+            self.events.pop()
+        } {
             if !self.canceled_events.remove(&e.id) {
                 // println!("{} {}->{} {:?}", e.time, e.src, e.dest, e.event);
                 self.clock = e.time;
@@ -173,7 +197,13 @@ impl<E: Debug> Simulation<E> {
                             actor.borrow_mut().on(e.event, &mut ctx);
                             let canceled = ctx.canceled_events.clone();
                             for ctx_e in ctx.events {
-                                self.add_event(ctx_e.event, e.dest.clone(), ctx_e.dest, ctx_e.delay);
+                                self.add_event(
+                                    ctx_e.event,
+                                    e.dest.clone(),
+                                    ctx_e.dest,
+                                    ctx_e.delay,
+                                    mc_events.as_mut().map(|x| &mut **x),
+                                );
                             };
                             for event_id in canceled {
                                 self.cancel_event(event_id);
@@ -195,7 +225,7 @@ impl<E: Debug> Simulation<E> {
 
     pub fn steps(&mut self, step_count: u32) -> bool {
         for _i in 0..step_count {
-            if !self.step() {
+            if !self.step(None) {
                 return false
             }
         }
@@ -203,17 +233,108 @@ impl<E: Debug> Simulation<E> {
     }
 
     pub fn step_until_no_events(&mut self) {
-        while self.step() {
+        while self.step(None) {
         }
     }
 
     pub fn step_for_duration(&mut self, duration: f64) {
         let end_time = self.time() + duration;
-        while self.step() && self.time() < end_time {
+        while self.step(None) && self.time() < end_time {
         }
+    }
+
+    pub fn model_checking_step(
+        &mut self,
+        check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
+        sys_time: &Instant,
+        limit: &Duration,
+        events: &mut Vec<EventEntry<E>>,
+    ) -> bool {
+        let mc_events_count = events.len();
+        if mc_events_count == 0 {
+            return check_fn(&self.actors);
+        }
+        for i in 0..mc_events_count {
+            if sys_time.elapsed() >= *limit {
+                return true;
+            }
+            let mut actors_states: HashMap<ActorId, Box<dyn Any>> = HashMap::new();
+            for (actor_id, actor) in &self.actors {
+                actors_states.insert(actor_id.clone(), actor.borrow().get_state());
+            }
+            let event_count = self.event_count;
+            let canceled_events = self.canceled_events.clone();
+            let rand = self.rand.clone();
+            let event = events.remove(i);
+            events.push(event.clone());
+            self.step(Some(events));
+            let next_step_res = self.model_checking_step(check_fn, sys_time, limit, events);
+            if !next_step_res {
+                let event_e = event.event.clone();
+                let event_any = &event_e as &dyn Any;
+                let (event_type, event_text1, event_text2) = if let Some(sys_event) = event_any.downcast_ref::<SysEvent<JsonMessage>>() {
+                    match sys_event {
+                        SysEvent::MessageSend { msg, src: _, dest: _ } => {
+                            ("message_send", &((*msg).tip[..]), &((*msg).data[..]))
+                        }
+                        SysEvent::MessageReceive { msg, src: _, dest: _ } => {
+                            ("message_receive", &((*msg).tip[..]), &((*msg).data[..]))
+                        }
+                        SysEvent::LocalMessageReceive { msg } => {
+                            ("local_message_receive", &((*msg).tip[..]), &((*msg).data[..]))
+                        }
+                        SysEvent::TimerSet { name, delay: _ } => {
+                            ("timer_set", &(name[..]), "")
+                        }
+                        SysEvent::TimerFired { name } => {
+                            ("timer_fired", &(name[..]), "")
+                        }
+                    }
+                } else {
+                    ("", "", "")
+                };
+                self.model_checking_trace.push(format!(
+                    "{:>9.3} {:>15} --> {:<15} {:^25} {:<10} {:?}",
+                    event.time,
+                    event.src.to_string(),
+                    event.dest.to_string(),
+                    event_type,
+                    event_text1,
+                    event_text2,
+                ));
+            }
+            while events.len() >= mc_events_count {
+                events.pop();
+            }
+            events.insert(i, event);
+            self.canceled_events = canceled_events;
+            self.event_count = event_count;
+            self.rand = rand;
+            for (actor_id, actor_state) in actors_states {
+                self.actors[&actor_id].borrow_mut().set_state(actor_state);
+            }
+            if !next_step_res {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    pub fn run_model_checking(
+        &mut self,
+        check_fn: &mut dyn for<'r> FnMut(&'r HashMap<ActorId, Rc<RefCell<dyn Actor<E>>>>) -> bool,
+        sys_time: &Instant,
+        limit: &Duration,
+    ) -> bool {
+        let mut events = self.events.clone().into_vec();
+        return self.model_checking_step(check_fn, sys_time, limit, &mut events);
     }
 
     pub fn read_undelivered_events(&mut self) -> Vec<EventEntry<E>> {
         self.undelivered_events.drain(..).collect()
+    }
+    
+    pub fn read_model_checking_trace(&mut self) -> Vec<String> {
+        self.model_checking_trace.drain(..).rev().collect()
     }
 }

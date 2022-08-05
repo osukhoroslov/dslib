@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::HashSet;
 use colored::*;
 
@@ -166,4 +167,14 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
     fn is_active(&self) -> bool {
         true
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn get_state(&self) -> Box<dyn Any> {
+        return Box::new("");
+    }
+
+    fn set_state(&mut self, _state: Box<dyn Any>) {}
 }
