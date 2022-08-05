@@ -8,6 +8,8 @@ use crate::sim::{Actor, ActorId, ActorContext};
 use crate::system::{Message, SysEvent};
 use crate::util::t;
 
+use crate::debugger;
+use crate::debugger::DebugEvent;
 
 pub trait Node<M: Message> {
     fn id(&self) -> &String;
@@ -50,6 +52,12 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
 
     pub fn send(&mut self, msg: M, dest: &str) {
         let dest = ActorId::from(dest);
+        debugger::add_event(DebugEvent::MessageSend{
+            msg: msg.to_json(),
+            src: self.ctx.id.to(),
+            dst: dest.to(),
+            ts: self.ctx.time()
+        });
         t!("{:>9.3} {:>10} --> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), dest.to(), msg);
         if self.ctx.id == dest {
             let event = SysEvent::MessageReceive { msg, src: self.ctx.id.clone(), dest: dest.clone() };
@@ -62,6 +70,11 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
     }
 
     pub fn send_local(&mut self, msg: M) {
+        debugger::add_event(DebugEvent::LocalMessageSend{
+            msg: msg.to_json(),
+            dst: self.ctx.id.to(),
+            ts: self.ctx.time()
+        });
         t!(format!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg).cyan());
         let event = LocalEvent {
             time: self.time(),
@@ -167,6 +180,12 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
             NodeStatus::Healthy => {
                 match event {
                     SysEvent::MessageReceive { msg, src, dest } => {
+                        debugger::add_event(DebugEvent::MessageReceive{
+                            msg: msg.to_json(),
+                            src: src.to(),
+                            dst: dest.to(),
+                            ts: ctx.time()
+                        });
                         t!("{:>9.3} {:>10} <-- {:<10} {:?}", ctx.time(), dest.to(), src.to(), msg);
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
@@ -175,6 +194,11 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         self.received_message_count += 1;
                     }
                     SysEvent::LocalMessageReceive { msg } => {
+                        debugger::add_event(DebugEvent::LocalMessageReceive{
+                            msg: msg.to_json(),
+                            dst: ctx.id.to(),
+                            ts: ctx.time()
+                        });
                         t!(format!("{:>9.3} {:>10} <<< {:<10} {:?}", ctx.time(), ctx.id.to(), "local", msg).cyan());
                         self.local_events.push(LocalEvent {
                             time: ctx.time(),
@@ -187,6 +211,11 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         self.node.borrow_mut().on_local_message(msg, &mut node_ctx);
                     }
                     SysEvent::TimerFired { name } => {
+                        debugger::add_event(DebugEvent::TimerFired{
+                            name: name.clone(),
+                            node: ctx.id.to(),
+                            ts: ctx.time()
+                        });
                         t!(format!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name).magenta());
                         self.timers.remove(&(ctx.id.clone(), name.clone()));
                         let mut node_ctx = Context::new(

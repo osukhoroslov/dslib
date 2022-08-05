@@ -1,3 +1,5 @@
+use crate::debugger;
+
 pub type TestResult = Result<bool, String>;
 
 pub struct Test<T> {
@@ -23,13 +25,16 @@ impl<T> TestSuite<T> {
         let mut passed_count = 0;
         let mut failed_tests = Vec::new();
         for test in &self.tests {
+            debugger::set_test(&test.name);
             println!("\n--- {} ---\n", test.name);
             match (test.func)(&test.config) {
                 Ok(_) => {
+                    debugger::set_test_result(String::from("PASSED:"));
                     println!("\nPASSED\n");
                     passed_count += 1;
                 }
                 Err(e) => {
+                    debugger::set_test_result(format!("FAILED:{}", e.replace("\n", " ")));
                     println!("\nFAILED: {}\n", e);
                     failed_tests.push((&test.name, e));
                 }
@@ -43,19 +48,26 @@ impl<T> TestSuite<T> {
                 println!("- {}: {}", test, e);
             }
             println!();
-            std::process::exit(1);
+            // std::process::exit(1);
         } else {
-            std::process::exit(0);
+            // std::process::exit(0);
         }
     }
 
     pub fn run_test(&mut self, name: &str) {
         for test in &self.tests {
             if test.name == name {
+                debugger::set_test(&test.name);
                 println!("\n--- {} ---\n", test.name);
                 match (test.func)(&test.config) {
-                    Ok(_) => println!("\nPASSED\n"),
-                    Err(e) => println!("\nFAILED: {}\n", e)
+                    Ok(_) => {
+                        debugger::set_test_result(String::from("PASSED:"));
+                        println!("\nPASSED\n")
+                    }
+                    Err(e) => {
+                        debugger::set_test_result(format!("FAILED:{}", e.replace("\n", " ")));
+                        println!("\nFAILED: {}\n", e)
+                    }
                 }
             }
         }
