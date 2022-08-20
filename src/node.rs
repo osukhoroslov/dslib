@@ -75,6 +75,10 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
 
     pub fn set_timer(&mut self, name: &str, delay: f64) {
         let event = SysEvent::TimerFired { name: name.to_string() };
+        assert!(
+            !self.timers.contains_key(&(self.ctx.id.clone(), name.to_string())),
+            "Timer \"{}\" is already set at node \"{}\" (active timer ids should be unique!)", name, self.ctx.id.clone()
+        );
         let event_id = self.ctx.emit(event, self.ctx.id.clone(), delay);
         self.timers.insert((self.ctx.id.clone(), name.to_string()), event_id);
     }
