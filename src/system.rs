@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::rc::Rc;
 use colored::*;
+use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::prelude::*;
 
 use crate::sim::*;
@@ -228,6 +229,14 @@ impl<M: Message + 'static> System<M> {
 
     pub fn time(&self) -> f64 {
         self.sim.time()
+    }
+
+    pub fn gen_range<T, R>(&mut self, range: R) -> T
+    where
+        T: SampleUniform,
+        R: SampleRange<T>,
+    {
+        self.sim.gen_range(range)
     }
 
     pub fn step(&mut self) -> bool {

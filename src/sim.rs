@@ -4,6 +4,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
 use decorum::R64;
+use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
 
@@ -147,6 +148,14 @@ impl<E: Debug> Simulation<E> {
         self.events.push(entry);
         self.event_count += 1;
         id
+    }
+
+    pub fn gen_range<T, R>(&mut self, range: R) -> T
+    where
+        T: SampleUniform,
+        R: SampleRange<T>,
+    {
+        self.rand.gen_range(range)
     }
 
     pub fn cancel_event(&mut self, event_id: u64) {
