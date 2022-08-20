@@ -211,6 +211,10 @@ impl<M: Message + 'static> System<M> {
         self.nodes.get(node_id).unwrap().borrow().received_message_count()
     }
 
+    pub fn get_max_size(&mut self, node_id: &str) -> u64 {
+        self.nodes.get(node_id).unwrap().borrow_mut().max_size()
+    }
+
     pub fn send(&mut self, msg: M, src: &str, dest: &str) {
         let event = SysEvent::MessageSend {
             msg,

@@ -51,6 +51,7 @@ pub struct PyNodeFactory {
     node_class: PyObject,
     msg_class: Rc<PyObject>,
     ctx_class: Rc<PyObject>,
+    get_size_fun: Rc<Py<PyAny>>,
 }
 
 impl PyNodeFactory {
@@ -59,18 +60,20 @@ impl PyNodeFactory {
         let node_realpath = fs::canonicalize(node_path).unwrap();
         let node_filename = node_realpath.to_str().unwrap();
         let node_module = node_filename.replace(".py", "");
-        let classes = Python::with_gil(|py| -> (PyObject, PyObject, PyObject) {
+        let classes = Python::with_gil(|py| -> (PyObject, PyObject, PyObject, Py<PyAny>) {
             let node_module = PyModule::from_code(
                 py, node_code.as_str(), node_filename, &node_module).unwrap();
             let node_class = node_module.getattr(node_class).unwrap().to_object(py);
             let msg_class = node_module.getattr("Message").unwrap().to_object(py);
             let ctx_class = node_module.getattr("Context").unwrap().to_object(py);
-            (node_class, msg_class, ctx_class)
+            let get_size_fun = get_size_fun(py);
+            (node_class, msg_class, ctx_class, get_size_fun)
         });
         Self {
             node_class: classes.0,
             msg_class: Rc::new(classes.1),
             ctx_class: Rc::new(classes.2),
+            get_size_fun: Rc::new(classes.3),
         }
     }
 
@@ -86,6 +89,10 @@ impl PyNodeFactory {
             node,
             msg_class: self.msg_class.clone(),
             ctx_class: self.ctx_class.clone(),
+            get_size_fun: self.get_size_fun.clone(),
+            max_size: 0,
+            max_size_freq: 0,
+            max_size_counter: 0,
         }
     }
 }
@@ -95,9 +102,18 @@ pub struct PyNode {
     node: PyObject,
     msg_class: Rc<PyObject>,
     ctx_class: Rc<PyObject>,
+    get_size_fun: Rc<Py<PyAny>>,
+    max_size: u64,
+    max_size_freq: u32,
+    max_size_counter: u32,
 }
 
 impl PyNode {
+    pub fn set_max_size_freq(&mut self, freq: u32) {
+        self.max_size_freq = freq;
+        self.max_size_counter = 1;
+    }
+
     fn handle_node_actions(ctx: &mut Context<JsonMessage>, py_ctx: &PyObject, py: Python) {
         let sent: Vec<(String, String, String)> = py_ctx.getattr(py, "_sent_messages").unwrap().extract(py).unwrap();
         for m in sent {
@@ -113,6 +129,18 @@ impl PyNode {
                 ctx.cancel_timer(&t.0);    
             } else {
                 ctx.set_timer(&t.0, t.1);
+            }
+        }
+    }
+
+    fn update_max_size(&mut self, py: Python, force_update: bool) {
+        if self.max_size_freq > 0 {
+            self.max_size_counter -= 1;
+            if self.max_size_counter == 0 || force_update {
+                let size: u64 = self.get_size_fun.call1(py, (&self.node,)).unwrap().extract(py).unwrap();
+                // let size: u64 = self.node.call_method0(py, "get_size").unwrap().extract(py).unwrap();
+                self.max_size = self.max_size.max(size);
+                self.max_size_counter = self.max_size_freq;
             }
         }
     }
@@ -132,6 +160,7 @@ impl Node<JsonMessage> for PyNode {
                 .map_err(|e| log_python_error(e, py))
                 .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
+            self.update_max_size(py, false);
         });
     }
 
@@ -144,6 +173,7 @@ impl Node<JsonMessage> for PyNode {
                 .map_err(|e| log_python_error(e, py))
                 .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
+            self.update_max_size(py, false);
         });
     }
 
@@ -155,7 +185,15 @@ impl Node<JsonMessage> for PyNode {
                 .map_err(|e| log_python_error(e, py))
                 .unwrap();
             PyNode::handle_node_actions(ctx, &py_ctx, py);
+            self.update_max_size(py, false);
         });
+    }
+
+    fn max_size(&mut self) -> u64 {
+        Python::with_gil(|py| {
+            self.update_max_size(py, true)
+        });
+        self.max_size
     }
 }
 
@@ -164,4 +202,31 @@ fn log_python_error(e: PyErr, py: Python) -> PyErr {
     e.print(py);
     eprintln!();
     e
+}
+
+fn get_size_fun(py: Python) -> Py<PyAny> {
+    PyModule::from_code(
+        py,
+        "
+import sys
+
+def get_size(obj, seen=None):
+    size = sys.getsizeof(obj)
+    if seen is None:
+        seen = set()
+    obj_id = id(obj)
+    if obj_id in seen:
+        return 0
+    seen.add(obj_id)
+    if isinstance(obj, dict):
+        size += sum([get_size(v, seen) for v in obj.values()])
+        size += sum([get_size(k, seen) for k in obj.keys()])
+    elif hasattr(obj, '__dict__'):
+        size += get_size(obj.__dict__, seen)
+    elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
+        size += sum([get_size(i, seen) for i in obj])
+    return size",
+        "",
+        "",
+    ).unwrap().getattr("get_size").unwrap().into()
 }

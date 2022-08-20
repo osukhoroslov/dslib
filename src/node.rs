@@ -14,6 +14,7 @@ pub trait Node<M: Message> {
     fn on_message(&mut self, msg: M, from: String, ctx: &mut Context<M>);
     fn on_local_message(&mut self, msg: M, ctx: &mut Context<M>);
     fn on_timer(&mut self, timer: String, ctx: &mut Context<M>);
+    fn max_size(&mut self) -> u64;
 }
 
 pub struct Context<'a, 'b, 'c, M: Message> {
@@ -150,6 +151,10 @@ impl<M: Message> NodeActor<M> {
 
     pub fn received_message_count(&self) -> u64 {
         self.received_message_count
+    }
+
+    pub fn max_size(&mut self) -> u64 {
+        self.node.borrow_mut().max_size()
     }
 
     pub fn crash(&mut self) {
