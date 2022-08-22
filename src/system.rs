@@ -31,10 +31,6 @@ pub enum SysEvent<M: Message> {
     LocalMessageReceive {
         msg: M,
     },
-    TimerSet {
-        name: String,
-        delay: f64,
-    },
     TimerFired {
         name: String,
     }
