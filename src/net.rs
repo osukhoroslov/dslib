@@ -136,16 +136,17 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
                         && !self.drop_incoming.contains(&dest.to())
                         && !self.disabled_links.contains(&(src.to(), dest.to())) 
                     {
-                        let delay = self.min_delay + ctx.rand() * (self.max_delay - self.min_delay);
                         if ctx.rand() < self.corrupt_rate {
                             // TODO: support message corruption
                         }
                         let e = SysEvent::MessageReceive { msg, src, dest: dest.clone() };
                         if ctx.rand() >= self.dupl_rate {
+                            let delay = self.min_delay + ctx.rand() * (self.max_delay - self.min_delay);
                             ctx.emit(e, dest, delay);
                         } else {
                             let dups = (ctx.rand() * 2.).ceil() as u32 + 1;
                             for _i in 0..dups {
+                                let delay = self.min_delay + ctx.rand() * (self.max_delay - self.min_delay);
                                 ctx.emit(e.clone(), dest.clone(), delay);
                             }
                         }
