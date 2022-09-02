@@ -14,6 +14,7 @@ use crate::util::t;
 
 pub trait Message: Debug + Clone {
     fn size(&self) -> u64;
+    fn corrupt(&mut self);
 }
 
 #[derive(Debug, Clone)]
@@ -123,6 +124,10 @@ impl<M: Message + 'static> System<M> {
 
     pub fn set_dupl_rate(&mut self, dupl_rate: f64) {
         self.net.borrow_mut().set_dupl_rate(dupl_rate);
+    }
+
+    pub fn set_corrupt_rate(&mut self, corrupt_rate: f64) {
+        self.net.borrow_mut().set_corrupt_rate(corrupt_rate);
     }
 
     pub fn drop_incoming(&mut self, node_id: &str) {

@@ -1,8 +1,10 @@
 use std::fmt::{Error, Formatter};
 use std::fs;
 use std::rc::Rc;
+use lazy_static::lazy_static;
 use pyo3::prelude::*;
 use pyo3::types::{PyModule, PyTuple};
+use regex::Regex;
 use serde::Serialize;
 
 use crate::node::{Node, Context};
@@ -44,6 +46,13 @@ impl std::fmt::Debug for JsonMessage {
 impl Message for JsonMessage {
     fn size(&self) -> u64 {
         self.data.len() as u64
+    }
+
+    fn corrupt(&mut self) {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#""\w+""#).unwrap();
+        }
+        self.data = RE.replace_all(&*self.data, "\"\"").to_string();
     }
 }
 
