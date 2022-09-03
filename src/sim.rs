@@ -4,6 +4,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::{Debug, Error, Formatter};
 use std::rc::Rc;
 use decorum::R64;
+use rand::distributions::{Alphanumeric, DistString};
 use rand::distributions::uniform::{SampleRange, SampleUniform};
 use rand::prelude::*;
 use rand_pcg::Pcg64;
@@ -156,6 +157,10 @@ impl<E: Debug> Simulation<E> {
         R: SampleRange<T>,
     {
         self.rand.gen_range(range)
+    }
+
+    pub fn random_string(&mut self, len: usize) -> String {
+        Alphanumeric.sample_string(&mut self.rand, len)
     }
 
     pub fn cancel_event(&mut self, event_id: u64) {
