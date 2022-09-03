@@ -156,7 +156,7 @@ impl<M: Message> Actor<SysEvent<M>> for Network {
                         }
                     } else {
                         t!(format!("{:>9} {:>10} --x {:<10} {:?} <-- message dropped",
-                                 "!!!", src.to(), dest.to(), msg).yellow());
+                                 "!!!", src.to(), dest.to(), msg).red());
                     }
                 } else {
                     t!(format!("Discarded message from crashed node {:?}", msg).yellow());
