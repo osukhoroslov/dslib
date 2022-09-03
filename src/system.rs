@@ -244,6 +244,10 @@ impl<M: Message + 'static> System<M> {
         self.sim.gen_range(range)
     }
 
+    pub fn random_string(&mut self, len: usize) -> String {
+        self.sim.random_string(len)
+    }
+
     pub fn step(&mut self) -> bool {
         self.sim.step()
     }
