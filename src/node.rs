@@ -63,7 +63,7 @@ impl<'a, 'b, 'c, M: Message> Context<'a, 'b, 'c, M> {
     }
 
     pub fn send_local(&mut self, msg: M) {
-        t!(format!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg).cyan());
+        t!(format!("{:>9.3} {:>10} >>> {:<10} {:?}", self.ctx.time(), self.ctx.id.to(), "local", msg).green());
         let event = LocalEvent {
             time: self.time(),
             msg: Some(msg.clone()),
@@ -196,7 +196,7 @@ impl<M: Message> Actor<SysEvent<M>> for NodeActor<M> {
                         self.node.borrow_mut().on_local_message(msg, &mut node_ctx);
                     }
                     SysEvent::TimerFired { name } => {
-                        t!(format!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name).magenta());
+                        t!(format!("{:>9.3} {:>10} !-- {:<10}", ctx.time(), ctx.id.to(), name).yellow());
                         self.timers.remove(&(ctx.id.clone(), name.clone()));
                         let mut node_ctx = Context::new(
                             ctx, &mut self.timers, &mut self.local_events, &mut self.local_mailbox,
