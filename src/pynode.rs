@@ -147,7 +147,6 @@ impl PyNode {
             self.max_size_counter -= 1;
             if self.max_size_counter == 0 || force_update {
                 let size: u64 = self.get_size_fun.call1(py, (&self.node,)).unwrap().extract(py).unwrap();
-                // let size: u64 = self.node.call_method0(py, "get_size").unwrap().extract(py).unwrap();
                 self.max_size = self.max_size.max(size);
                 self.max_size_counter = self.max_size_freq;
             }
