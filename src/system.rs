@@ -286,6 +286,17 @@ impl<M: Message + 'static> System<M> {
         Err("No messages")
     }
 
+    pub fn step_until_local_message_with_timeout(&mut self, node_id: &str, timeout: f64) -> Result<Vec<M>,&str> {
+        let end_time = self.time() + timeout;
+        while self.step() && self.time() < end_time {
+            match self.check_mailbox(node_id) {
+                Some(messages) => return Ok(messages),
+                None => ()
+            }
+        }
+        Err("No messages")
+    }
+
     pub fn get_local_events(&self, node_id: &str) -> Vec<LocalEvent<M>> {
         let node = self.nodes.get(node_id).unwrap().borrow();
         node.get_local_events()
