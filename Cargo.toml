@@ -1,6 +1,6 @@
 [package]
 name = "dslib"
-version = "0.1.1"
+version = "0.1.2"
 description = "A simulation-based framework for teaching distributed systems."
 repository = "https://github.com/osukhoroslov/dslib"
 authors = ["Oleg Sukhoroslov <oleg.sukhoroslov@gmail.com>"]
