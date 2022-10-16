@@ -260,7 +260,7 @@ impl<M: Message + 'static> System<M> {
         self.sim.step_until_no_events()
     }
 
-    pub fn step_for_duration(&mut self, duration: f64) {
+    pub fn step_for_duration(&mut self, duration: f64) -> bool {
         self.sim.step_for_duration(duration)
     }
 

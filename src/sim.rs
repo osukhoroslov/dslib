@@ -221,10 +221,14 @@ impl<E: Debug> Simulation<E> {
         }
     }
 
-    pub fn step_for_duration(&mut self, duration: f64) {
+    pub fn step_for_duration(&mut self, duration: f64) -> bool {
         let end_time = self.time() + duration;
-        while self.step() && self.time() < end_time {
+        while self.time() < end_time {
+            if !self.step() {
+                return false
+            }
         }
+        true
     }
 
     pub fn read_undelivered_events(&mut self) -> Vec<EventEntry<E>> {
